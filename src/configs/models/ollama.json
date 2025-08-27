@@ -1,0 +1,74 @@
+{
+  "provider": "ollama",
+  "display_name": "Ollama",
+  "description": "Local models for privacy-focused development",
+  "api_key_env": null,
+  "base_url_env": "OLLAMA_BASE_URL",
+  "default_base_url": "http://localhost:11434",
+  "langchain_class": "langchain_ollama.ChatOllama",
+  "package_name": "langchain-ollama",
+  "models": {
+    "llama3.1": {
+      "id": "llama3.1",
+      "display_name": "Llama 3.1",
+      "description": "Meta's latest open-source model",
+      "context_length": 128000,
+      "cost_per_1k_tokens": 0,
+      "capabilities": ["chat", "reasoning", "general"],
+      "recommended_for": ["general", "privacy-focused"],
+      "size_gb": 4.7,
+      "system_requirements": "8GB RAM minimum"
+    },
+    "codellama": {
+      "id": "codellama",
+      "display_name": "Code Llama",
+      "description": "Specialized for code generation",
+      "context_length": 100000,
+      "cost_per_1k_tokens": 0,
+      "capabilities": ["coding", "debugging"],
+      "recommended_for": ["coding", "testing", "debugging"],
+      "size_gb": 3.8,
+      "system_requirements": "8GB RAM minimum"
+    },
+    "deepseek-coder": {
+      "id": "deepseek-coder",
+      "display_name": "DeepSeek Coder (Local)",
+      "description": "DeepSeek's coding model running locally",
+      "context_length": 32000,
+      "cost_per_1k_tokens": 0,
+      "capabilities": ["coding", "debugging"],
+      "recommended_for": ["coding", "testing"],
+      "size_gb": 8.9,
+      "system_requirements": "16GB RAM recommended"
+    },
+    "qwen2.5-coder": {
+      "id": "qwen2.5-coder",
+      "display_name": "Qwen 2.5 Coder",
+      "description": "Alibaba's coding-focused model",
+      "context_length": 32000,
+      "cost_per_1k_tokens": 0,
+      "capabilities": ["coding", "multilingual-coding"],
+      "recommended_for": ["coding", "multilingual"],
+      "size_gb": 7.6,
+      "system_requirements": "12GB RAM recommended"
+    }
+  },
+  "default_model": "llama3.1",
+  "task_preferences": {
+    "coding": "codellama",
+    "testing": "codellama",
+    "planning": "llama3.1",
+    "review": "llama3.1", 
+    "debugging": "deepseek-coder",
+    "analysis": "llama3.1"
+  },
+  "initialization_params": {
+    "temperature": 0
+  },
+  "setup_instructions": [
+    "Install Ollama from https://ollama.ai",
+    "Pull models with: ollama pull <model_name>",
+    "Start Ollama service: ollama serve",
+    "Models run locally - no API key needed"
+  ]
+}

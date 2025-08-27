@@ -1,0 +1,66 @@
+{
+  "provider": "local_example",
+  "display_name": "Local Example Models",
+  "description": "Example configuration for local LLM setup",
+  "api_key_env": null,
+  "base_url_env": "LOCAL_EXAMPLE_URL",
+  "default_base_url": "http://localhost:1234/v1",
+  "langchain_class": "langchain_openai.chat_models.ChatOpenAI",
+  "package_name": "langchain-openai",
+  "models": {
+    "local-llama-8b": {
+      "id": "llama-3.1-8b-instruct",
+      "display_name": "Local LLaMA 3.1 8B",
+      "description": "Meta's LLaMA 3.1 8B running locally",
+      "context_length": 32768,
+      "cost_per_1k_tokens": 0,
+      "capabilities": ["chat", "coding", "reasoning"],
+      "recommended_for": ["general", "coding", "privacy"],
+      "size_gb": 4.7,
+      "system_requirements": "8GB RAM minimum, GPU recommended"
+    },
+    "local-codellama-7b": {
+      "id": "codellama-7b-instruct",
+      "display_name": "Local Code LLaMA 7B", 
+      "description": "Code-specialized LLaMA model running locally",
+      "context_length": 16384,
+      "cost_per_1k_tokens": 0,
+      "capabilities": ["coding", "debugging"],
+      "recommended_for": ["coding", "testing", "debugging"],
+      "size_gb": 3.8,
+      "system_requirements": "6GB RAM minimum"
+    }
+  },
+  "default_model": "local-llama-8b",
+  "task_preferences": {
+    "coding": "local-codellama-7b",
+    "testing": "local-codellama-7b",
+    "planning": "local-llama-8b", 
+    "review": "local-llama-8b",
+    "debugging": "local-codellama-7b",
+    "analysis": "local-llama-8b"
+  },
+  "initialization_params": {
+    "temperature": 0,
+    "max_tokens": 4096,
+    "api_key": "local-dummy-key"
+  },
+  "setup_instructions": [
+    "1. Install LM Studio, text-generation-webui, or similar",
+    "2. Download LLaMA 3.1 8B and Code LLaMA 7B models",
+    "3. Start local server with OpenAI-compatible API",
+    "4. Set LOCAL_EXAMPLE_URL=http://localhost:1234/v1 in .env",
+    "5. Rename this provider or create your own JSON config"
+  ],
+  "server_compatibility": {
+    "lm-studio": "Fully compatible with OpenAI API mode",
+    "text-generation-webui": "Compatible with --api --extensions openai",
+    "vllm": "Compatible with OpenAI-compatible server mode",
+    "ollama": "Use dedicated ollama.json provider instead"
+  },
+  "notes": [
+    "This is a working example - models will fail if server not running",
+    "Copy this file and modify for your specific setup",
+    "Remove this file if not needed to avoid menu clutter"
+  ]
+}

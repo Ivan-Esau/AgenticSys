@@ -1,0 +1,53 @@
+{
+  "provider": "deepseek",
+  "display_name": "DeepSeek",
+  "description": "Fast, cost-effective, coding-focused AI models",
+  "api_key_env": "DEEPSEEK_API_KEY",
+  "base_url_env": "DEEPSEEK_BASE_URL",
+  "default_base_url": "https://api.deepseek.com",
+  "langchain_class": "langchain_deepseek.chat_models.ChatDeepSeek",
+  "package_name": "langchain-deepseek",
+  "models": {
+    "deepseek-chat": {
+      "id": "deepseek-chat",
+      "display_name": "DeepSeek Chat",
+      "description": "General purpose conversational model",
+      "context_length": 32000,
+      "cost_per_1k_tokens": 0.0001,
+      "capabilities": ["chat", "reasoning", "general"],
+      "recommended_for": ["planning", "review", "general"]
+    },
+    "deepseek-coder": {
+      "id": "deepseek-coder", 
+      "display_name": "DeepSeek Coder",
+      "description": "Specialized for code generation and programming",
+      "context_length": 32000,
+      "cost_per_1k_tokens": 0.0001,
+      "capabilities": ["coding", "debugging", "technical"],
+      "recommended_for": ["coding", "testing", "debugging"]
+    },
+    "deepseek-reasoner": {
+      "id": "deepseek-reasoner",
+      "display_name": "DeepSeek Reasoner", 
+      "description": "Advanced reasoning and problem solving",
+      "context_length": 32000,
+      "cost_per_1k_tokens": 0.0002,
+      "capabilities": ["reasoning", "analysis", "problem-solving"],
+      "recommended_for": ["planning", "analysis", "complex-reasoning"]
+    }
+  },
+  "default_model": "deepseek-chat",
+  "task_preferences": {
+    "coding": "deepseek-coder",
+    "testing": "deepseek-coder", 
+    "planning": "deepseek-chat",
+    "review": "deepseek-chat",
+    "debugging": "deepseek-coder",
+    "analysis": "deepseek-reasoner"
+  },
+  "initialization_params": {
+    "temperature": 0,
+    "max_retries": 5,
+    "stream_usage": true
+  }
+}

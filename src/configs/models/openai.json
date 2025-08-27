@@ -1,0 +1,61 @@
+{
+  "provider": "openai",
+  "display_name": "OpenAI",
+  "description": "Industry standard AI models with reliable performance",
+  "api_key_env": "OPENAI_API_KEY",
+  "base_url_env": "OPENAI_BASE_URL",
+  "default_base_url": "https://api.openai.com/v1",
+  "langchain_class": "langchain_openai.chat_models.ChatOpenAI",
+  "package_name": "langchain-openai",
+  "models": {
+    "gpt-4o": {
+      "id": "gpt-4o",
+      "display_name": "GPT-4o",
+      "description": "Most capable multimodal model",
+      "context_length": 128000,
+      "cost_per_1k_tokens": 0.005,
+      "capabilities": ["chat", "coding", "reasoning", "multimodal"],
+      "recommended_for": ["coding", "complex-reasoning", "multimodal"]
+    },
+    "gpt-4o-mini": {
+      "id": "gpt-4o-mini",
+      "display_name": "GPT-4o Mini",
+      "description": "Fast and cost-effective intelligent model",
+      "context_length": 128000,
+      "cost_per_1k_tokens": 0.00015,
+      "capabilities": ["chat", "coding", "reasoning"],
+      "recommended_for": ["general", "planning", "review"]
+    },
+    "gpt-4-turbo": {
+      "id": "gpt-4-turbo",
+      "display_name": "GPT-4 Turbo",
+      "description": "Previous generation high-performance model",
+      "context_length": 128000,
+      "cost_per_1k_tokens": 0.01,
+      "capabilities": ["chat", "coding", "reasoning"],
+      "recommended_for": ["complex-tasks", "analysis"]
+    },
+    "gpt-3.5-turbo": {
+      "id": "gpt-3.5-turbo",
+      "display_name": "GPT-3.5 Turbo",
+      "description": "Fast and cost-effective legacy model",
+      "context_length": 16385,
+      "cost_per_1k_tokens": 0.0005,
+      "capabilities": ["chat", "basic-coding"],
+      "recommended_for": ["simple-tasks", "budget-conscious"]
+    }
+  },
+  "default_model": "gpt-4o-mini",
+  "task_preferences": {
+    "coding": "gpt-4o",
+    "testing": "gpt-4o",
+    "planning": "gpt-4o-mini",
+    "review": "gpt-4o-mini",
+    "debugging": "gpt-4o",
+    "analysis": "gpt-4o"
+  },
+  "initialization_params": {
+    "temperature": 0,
+    "max_retries": 5
+  }
+}
