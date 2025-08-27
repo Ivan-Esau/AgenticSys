@@ -1,7 +1,15 @@
 import asyncio
 import argparse
 from textwrap import dedent
-from base_agent import BaseAgent, get_common_tools_and_client
+from typing import List, Any
+
+# Import from new modules
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent.parent))
+
+from src.agents.base_agent import BaseAgent
+
 
 PIPELINE_PROMPT = """
 You are the Pipeline Watcher Agent.
@@ -19,7 +27,7 @@ GOAL
    - List failed jobs (name, URL).
    - Include the first error line from each job log if accessible.
    - Post/Update an MR note titled "CI Summary" with status and bullets (if mr_iid known).
-4) If all jobs green, comment "All checks passed ✅" on the MR (if mr_iid provided).
+4) If all jobs green, comment "All checks passed [OK]" on the MR (if mr_iid provided).
 
 RULES
 - Always include project_id on GitLab tool calls.
@@ -29,9 +37,9 @@ OUTPUT
 - A concise summary including pipeline id, status, and any failed jobs.
 """
 
-async def run(project_id: str, ref: str | None, mr_iid: str | None, show_tokens: bool = True):
-    tools, client = await get_common_tools_and_client()
-    agent = BaseAgent("pipeline-agent", PIPELINE_PROMPT.strip(), tools)
+async def run(project_id: str, ref: str | None, mr_iid: str | None, tools: List[Any], show_tokens: bool = True):
+    """Run pipeline-agent with provided tools (no MCP client management needed)"""
+    agent = BaseAgent("pipeline-agent", PIPELINE_PROMPT.strip(), tools, project_id=project_id)
     ref_str = ref or ""
     mr_str = mr_iid or ""
     content = await agent.run(dedent(f"""
@@ -40,10 +48,6 @@ async def run(project_id: str, ref: str | None, mr_iid: str | None, show_tokens:
         mr_iid={mr_str}
         apply=true
     """), show_tokens=show_tokens)
-    try:
-        await client.close()
-    except Exception:
-        pass
     return content
 
 if __name__ == "__main__":
