@@ -73,6 +73,12 @@ temp/
 *.tmp
 *.bak
 
+# Project specific state files
+state_*.json
+debug_*.py
+test_*.py
+temp_*.py
+
 # API keys and secrets
 *.key
 *.pem

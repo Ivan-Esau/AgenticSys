@@ -59,13 +59,206 @@ class BaseAgent:
                 print(f"  [CACHED] File: {file_path} ({len(result)} chars)")
 
     def _wrap_tools_with_cache(self, tools):
-        """Wrap tools with caching functionality - simplified for now"""
-        # For now, return original tools and handle caching at agent level
-        # This avoids LangGraph compatibility issues
-        print(f"[CACHING] State connected: {self.state is not None}")
-        if self.state:
-            print(f"[CACHING] Will cache get_file_contents calls for project {self.project_id}")
-        return tools
+        """Wrap tools with caching functionality using LangChain-compatible approach"""
+        if not self.state:
+            return tools
+        
+        wrapped_tools = []
+        for tool in tools:
+            if hasattr(tool, 'name') and tool.name == 'get_file_contents':
+                # Create a proper LangChain tool wrapper that respects async/sync patterns
+                cached_tool = self._create_langchain_cached_tool(tool)
+                wrapped_tools.append(cached_tool)
+                print(f"[CACHING] Wrapped get_file_contents tool with LangChain-compatible caching")
+            else:
+                wrapped_tools.append(tool)
+        
+        return wrapped_tools
+    
+    def _create_langchain_cached_tool(self, original_tool):
+        """Create a LangChain-compatible cached tool using StructuredTool.from_function"""
+        from langchain_core.tools import StructuredTool
+        from pydantic import BaseModel, Field
+        import asyncio
+        
+        # Define input schema for the wrapper - keeps simple interface
+        class FileInput(BaseModel):
+            file: str = Field(description="File path to read")
+        
+        # Create sync cached function
+        def sync_cached_get_file_contents(file: str) -> str:
+            """Get file contents with intelligent caching (sync version)"""
+            # Check cache first
+            if self.state:
+                cached_result = self.state.get_cached_file(file)
+                if cached_result:
+                    print(f"  [CACHE HIT] File: {file}")
+                    return cached_result
+            
+            # Not in cache - MCP tools are async-only, so we need to run async in sync context
+            try:
+                import asyncio
+                
+                async def async_call():
+                    # Convert to MCP tool format with correct parameters
+                    project_id = self.project_id if hasattr(self, 'project_id') else "114"
+                    return await original_tool.ainvoke({
+                        "project_id": project_id,
+                        "file_path": file
+                    })
+                
+                # Handle different async contexts
+                try:
+                    # Try to get existing event loop
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # We're in an async context - return cache miss message
+                        print(f"  [CACHE MISS] File: {file} (async context - returning error)")
+                        return f"[SYNC ERROR] File {file} - MCP tools require async context"
+                    else:
+                        result = loop.run_until_complete(async_call())
+                except RuntimeError:
+                    # No event loop - create one
+                    result = asyncio.run(async_call())
+                
+                # Extract content from MCP response if it's JSON
+                if result and isinstance(result, str):
+                    try:
+                        import json
+                        parsed = json.loads(result)
+                        if isinstance(parsed, dict) and 'content' in parsed:
+                            result = parsed['content']
+                    except (json.JSONDecodeError, KeyError):
+                        # Not JSON or no content field, use as-is
+                        pass
+                
+                # Cache the result
+                if self.state and isinstance(result, str) and result:
+                    self.state.cache_file(file, result)
+                    print(f"  [CACHED] File: {file} ({len(result)} chars)")
+                
+                return result
+            except Exception as e:
+                print(f"  [CACHE ERROR] Sync tool call failed: {e}")
+                return f"Error reading file: {e}"
+        
+        # Create async cached function
+        async def async_cached_get_file_contents(file: str) -> str:
+            """Get file contents with intelligent caching (async version)"""
+            # Check cache first
+            if self.state:
+                cached_result = self.state.get_cached_file(file)
+                if cached_result:
+                    print(f"  [CACHE HIT] File: {file}")
+                    return cached_result
+            
+            # Not in cache - call original tool with correct parameters
+            try:
+                project_id = self.project_id if hasattr(self, 'project_id') else "114"
+                result = await original_tool.ainvoke({
+                    "project_id": project_id,
+                    "file_path": file
+                })
+                
+                # Extract content from MCP response if it's JSON
+                if result and isinstance(result, str):
+                    try:
+                        import json
+                        parsed = json.loads(result)
+                        if isinstance(parsed, dict) and 'content' in parsed:
+                            result = parsed['content']
+                    except (json.JSONDecodeError, KeyError):
+                        # Not JSON or no content field, use as-is
+                        pass
+                
+                # Cache the result
+                if self.state and isinstance(result, str) and result:
+                    self.state.cache_file(file, result)
+                    print(f"  [CACHED] File: {file} ({len(result)} chars)")
+                
+                return result
+            except Exception as e:
+                print(f"  [CACHE ERROR] Async tool call failed: {e}")
+                return f"Error reading file: {e}"
+        
+        # Create proper StructuredTool with both sync and async support
+        try:
+            return StructuredTool.from_function(
+                func=sync_cached_get_file_contents,     # Sync version
+                coroutine=async_cached_get_file_contents, # Async version
+                name="get_file_contents",
+                description=getattr(original_tool, 'description', 'Get file contents with caching'),
+                args_schema=FileInput
+            )
+        except Exception as e:
+            print(f"[CACHE WARNING] Could not create cached tool: {e}")
+            return original_tool  # Fallback to original
+    
+    def _create_cached_file_tool(self, original_tool):
+        """Create a cached version of the get_file_contents tool"""
+        from langchain_core.tools import StructuredTool
+        from pydantic import BaseModel, Field
+        
+        # Define the input schema (matching original tool)
+        class FileInput(BaseModel):
+            file: str = Field(description="File path to read")
+            
+        def cached_get_file_contents(file: str) -> str:
+            """Get file contents with caching support"""
+            # Check cache first
+            if self.state:
+                cached_result = self.state.get_cached_file(file)
+                if cached_result:
+                    print(f"  [CACHE HIT] File: {file}")
+                    return cached_result
+            
+            # Not in cache - call original tool
+            # LangChain tools are complex - just call the original and handle async internally
+            try:
+                import asyncio
+                
+                # Create async wrapper
+                async def async_call():
+                    try:
+                        return await original_tool.ainvoke({"file": file})
+                    except:
+                        # Fallback to sync if available
+                        try:
+                            return original_tool.invoke({"file": file})
+                        except:
+                            return original_tool.run({"file": file})
+                
+                # Run in event loop
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # If we're already in an async context, we need to handle this differently
+                        # For now, just indicate cache miss and return original tool behavior
+                        print(f"  [CACHE MISS] File: {file} (async context)")
+                        return f"[CACHE MISS] {file} - would call original tool"
+                    else:
+                        result = loop.run_until_complete(async_call())
+                except:
+                    # If no event loop, create one
+                    result = asyncio.run(async_call())
+                
+                # Cache the result
+                if self.state and isinstance(result, str) and result:
+                    self.state.cache_file(file, result)
+                    print(f"  [CACHED] File: {file} ({len(result)} chars)")
+                
+                return result
+            except Exception as e:
+                print(f"  [ERROR] Failed to read file {file}: {e}")
+                return f"Error reading file: {e}"
+        
+        # Create new tool with caching function
+        return StructuredTool.from_function(
+            func=cached_get_file_contents,
+            name="get_file_contents",
+            description="Get file contents with caching support",
+            args_schema=FileInput
+        )
     
     
 
@@ -83,22 +276,31 @@ class BaseAgent:
             self.tools = self._wrap_tools_with_cache(self.tools)
         
         # Create agent with base configuration (using potentially wrapped tools)
-        self.agent = create_react_agent(
-            model=self.model,
-            tools=self.tools,
-            prompt=self.system_prompt
-        )
+        # Handle LangGraph version compatibility for prompt parameter
+        try:
+            self.agent = create_react_agent(
+                model=self.model,
+                tools=self.tools,
+                messages_modifier=self.system_prompt
+            )
+        except TypeError:
+            # Fallback for older LangGraph versions
+            try:
+                self.agent = create_react_agent(
+                    model=self.model,
+                    tools=self.tools,
+                    state_modifier=self.system_prompt
+                )
+            except TypeError:
+                # Final fallback to prompt parameter
+                self.agent = create_react_agent(
+                    model=self.model,
+                    tools=self.tools,
+                    prompt=self.system_prompt
+                )
         
         # Store config with higher recursion limit from configuration
         self.config = {"recursion_limit": Config.AGENT_RECURSION_LIMIT}  # Default: 200
-        
-        # Integrate with ProjectState if project_id provided
-        self.project_id = project_id
-        self.state: Optional[ProjectState] = None
-        if project_id:
-            self.state = get_project_state(project_id)
-            # Wrap tools with caching
-            self.tools = self._wrap_tools_with_cache(self.tools)
 
     async def _stream_run(self, inputs: dict, show_tokens: bool) -> Optional[str]:
         """Stream execution with progress display."""

@@ -28,8 +28,12 @@ class ProjectState:
         self.current_branch: Optional[str] = None
         self.current_issue: Optional[str] = None
         
+        # Technology stack preferences for new projects
+        self.tech_stack: Optional[Dict[str, str]] = None
+        
         # File knowledge cache - the most important optimization
         # Avoids redundant API calls across agents
+        # Simple overwrite strategy: new content always overwrites old
         self.file_cache: Dict[str, Dict[str, Any]] = {}
         
         # Implementation tracking
@@ -46,29 +50,44 @@ class ProjectState:
         
         # Checkpoint history for recovery
         self.checkpoints: List[Dict] = []
+    
+    def get_file_implementation_status(self, file_path: str) -> str:
+        """Get implementation status of a specific file"""
+        if file_path not in self.file_cache:
+            return "unknown"
+        
+        cache_entry = self.file_cache[file_path]
+        return cache_entry.get("implementation_status", "unknown")
+    
+    def update_file_implementation_status(self, file_path: str, status: str) -> None:
+        """Update implementation status of a file"""
+        if file_path in self.file_cache:
+            self.file_cache[file_path]["implementation_status"] = status
+            self.file_cache[file_path]["updated_at"] = datetime.now().isoformat()
+    
+    def get_current_issue(self) -> Optional[Dict]:
+        """Get current issue details"""
+        if not self.current_issue:
+            return None
+        return next((issue for issue in self.issues if issue.get('iid') == self.current_issue), None)
         
     def cache_file(self, path: str, content: str, branch: Optional[str] = None) -> None:
-        """Cache file content to avoid redundant reads"""
+        """Cache file content - always overwrites existing cache"""
+        target_branch = branch or self.current_branch or self.default_branch
+        
         self.file_cache[path] = {
             "content": content,
-            "branch": branch or self.current_branch or self.default_branch,
+            "branch": target_branch,
             "cached_at": datetime.now().isoformat(),
             "status": self._analyze_file_status(content)
         }
     
-    def get_cached_file(self, path: str, max_age_seconds: int = 300) -> Optional[str]:
-        """Get cached file if available and fresh"""
+    def get_cached_file(self, path: str) -> Optional[str]:
+        """Get cached file if available - no expiration, cache is always valid until overwritten"""
         if path not in self.file_cache:
             return None
             
-        cache_entry = self.file_cache[path]
-        cached_time = datetime.fromisoformat(cache_entry["cached_at"])
-        
-        # Check if cache is still fresh
-        if (datetime.now() - cached_time).seconds > max_age_seconds:
-            return None
-            
-        return cache_entry["content"]
+        return self.file_cache[path]["content"]
     
     def _analyze_file_status(self, content: str) -> str:
         """Determine if file is empty, partial, or complete"""
@@ -85,7 +104,6 @@ class ProjectState:
         if len(code_lines) < 5:  # Less than 5 lines of actual code
             return "empty"
         
-        # Check for TODO markers
         content_lower = content.lower()
         if 'todo' in content_lower or 'implement' in content_lower:
             return "partial"
