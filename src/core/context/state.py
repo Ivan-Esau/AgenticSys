@@ -126,7 +126,7 @@ class ProjectState:
     def get_handoff(self, agent_name: str) -> Optional[Dict]:
         """Get handoff context if this agent is the recipient"""
         if self.handoff_context.get("to") == agent_name:
-            return self.handoff_context.get("context")
+            return self.handoff_context.get("")
         return None
     
     def update_issue_status(self, issue_id: str, status: str) -> None:

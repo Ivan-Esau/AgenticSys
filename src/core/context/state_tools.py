@@ -3,9 +3,9 @@ State-aware tools that integrate ProjectState with LangChain tool annotations.
 These tools provide intelligent, context-aware operations for agents.
 """
 
-from typing import Annotated, List, Optional, Dict, Any
+from typing import Annotated, List
 from langchain_core.tools import tool
-from .state import ProjectState, get_project_state
+from src.core.context.state import get_project_state
 
 
 @tool  

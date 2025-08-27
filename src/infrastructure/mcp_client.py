@@ -4,7 +4,7 @@ Handles connection and tool loading from GitLab MCP server.
 """
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from ..core.config import Config
+from src.core.llm.config import Config
 from typing import Tuple, List, Any
 
 
@@ -19,7 +19,6 @@ async def load_mcp_tools() -> Tuple[List[Any], MultiServerMCPClient]:
     
     # Suppress MCP initialization errors/warnings
     import logging
-    import sys
     import os
     from contextlib import redirect_stdout, redirect_stderr
     

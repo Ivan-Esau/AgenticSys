@@ -6,8 +6,8 @@ from textwrap import dedent
 # Import from new modules
 try:
     from .base_agent import BaseAgent, get_common_tools_and_client
-    from ..core.config import Config
-    from ..core.constants import AGENT_NAMES
+    from src.core.llm.config import Config
+    from src.core.agents.constants import AGENT_NAMES
 except ImportError:
     import sys
     from pathlib import Path

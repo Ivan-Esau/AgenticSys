@@ -31,14 +31,22 @@ class Config:
     MCP_TRANSPORT: str = "streamable_http"
     
     # LLM Configuration
+    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "deepseek")
     LLM_MODEL: str = os.getenv("LLM_MODEL", "deepseek-chat")
     LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0"))
     LLM_MAX_RETRIES: int = int(os.getenv("LLM_MAX_RETRIES", "5"))
     LLM_STREAM_USAGE: bool = True
     
-    # DeepSeek Configuration
+    # Provider API Keys
     DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "")
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+    
+    # Provider Base URLs
     DEEPSEEK_BASE_URL: Optional[str] = os.getenv("DEEPSEEK_BASE_URL")
+    OPENAI_BASE_URL: Optional[str] = os.getenv("OPENAI_BASE_URL")
+    OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     
     # Runner Configuration
     AUTO_CREATE_RUNNER: bool = os.getenv("AUTO_CREATE_RUNNER", "false").lower() == "true"
@@ -59,17 +67,31 @@ class Config:
     @classmethod
     def validate(cls) -> bool:
         """Validate required configuration values."""
+        # Always required
         required = {
             "GITLAB_URL": cls.GITLAB_URL,
             "GITLAB_TOKEN": cls.GITLAB_TOKEN,
-            "DEEPSEEK_API_KEY": cls.DEEPSEEK_API_KEY,
         }
+        
+        # Provider-specific API key requirements
+        provider = cls.LLM_PROVIDER.lower()
+        if provider == "deepseek" and not cls.DEEPSEEK_API_KEY:
+            required["DEEPSEEK_API_KEY"] = cls.DEEPSEEK_API_KEY
+        elif provider == "openai" and not cls.OPENAI_API_KEY:
+            required["OPENAI_API_KEY"] = cls.OPENAI_API_KEY
+        elif provider == "claude" and not cls.ANTHROPIC_API_KEY:
+            required["ANTHROPIC_API_KEY"] = cls.ANTHROPIC_API_KEY
+        elif provider == "groq" and not cls.GROQ_API_KEY:
+            required["GROQ_API_KEY"] = cls.GROQ_API_KEY
+        # Note: Ollama doesn't require API key (local)
         
         missing = [key for key, value in required.items() if not value]
         
         if missing:
             print(f"⚠️  Missing required configuration: {', '.join(missing)}")
             print("Please check your .env file")
+            if provider != "ollama":
+                print(f"For {provider.upper()} provider, ensure the corresponding API key is set")
             return False
         
         return True

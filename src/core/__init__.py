@@ -2,10 +2,10 @@
 Core modules for configuration and utilities.
 """
 
-from .config import Config
-from .constants import *
-from .utils import *
-from .llm_config import make_model, ModelConfig
+from src.core.llm.config import Config
+from src.core.agents.constants import *
+from src.core.llm.utils import *
+from src.core.llm.llm_config import make_model, ModelConfig
 
 __all__ = [
     'Config',

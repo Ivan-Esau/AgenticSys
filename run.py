@@ -109,6 +109,13 @@ def show_main_menu():
             else:
                 print("❌ Please enter 'y' for yes or 'n' for no (default).")
     
+    # Step 4.5: LLM Provider Selection
+    llm_provider = None
+    provider_config = show_llm_provider_menu()
+    if provider_config:
+        llm_provider = provider_config
+        print(f"✓ Selected LLM provider: {provider_config['provider'].upper()}")
+    
     # Step 5: Advanced Options
     print(f"\n⚙️ ADVANCED OPTIONS:")
     
@@ -138,6 +145,13 @@ def show_main_menu():
     else:
         print("Tech Stack: Auto-detect")
     
+    if llm_provider:
+        print(f"LLM Provider: {llm_provider['provider'].upper()}")
+        if 'model' in llm_provider and llm_provider['model']:
+            print(f"  Model: {llm_provider['model']}")
+    else:
+        print("LLM Provider: Default (from .env)")
+    
     print(f"Debug Mode: {'Enabled' if debug else 'Disabled'}")
     print("="*70)
     
@@ -157,6 +171,7 @@ def show_main_menu():
         "specific_issue": specific_issue,
         "resume_path": resume_path,
         "tech_stack": tech_stack,
+        "llm_provider": llm_provider,
         "debug": debug
     }
 
@@ -513,6 +528,140 @@ def show_cross_platform_menu():
             print("  ❌ Please select 1-8.")
 
 
+def show_llm_provider_menu():
+    """Interactive menu for selecting LLM provider"""
+    from src.core.llm.llm_providers import validate_provider_config
+    from src.core.llm.model_config_loader import get_model_config_loader
+    
+    print(f"\n🤖 LLM PROVIDER CONFIGURATION:")
+    print("  Select your preferred Large Language Model provider:")
+    print("  (Default provider from .env will be used if skipped)")
+    print()
+    
+    # Load provider information from JSON configs
+    loader = get_model_config_loader()
+    available_providers = loader.get_available_providers()
+    provider_summary = loader.get_provider_summary()
+    
+    print("🤖 AVAILABLE PROVIDERS:")
+    provider_options = []
+    
+    option_num = 1
+    for provider in available_providers:
+        if provider in provider_summary:
+            summary = provider_summary[provider]
+            display_name = summary["display_name"]
+            description = summary["description"]
+            is_valid = summary["valid"]
+            
+            status_icon = "✅" if is_valid else "⚠️"
+            provider_options.append((str(option_num), provider, display_name, description))
+            print(f"  {option_num}. {display_name} - {description} {status_icon}")
+            option_num += 1
+    
+    skip_option = str(option_num)
+    provider_options.append((skip_option, "skip", "Skip", "Use current .env configuration"))
+    print(f"  {skip_option}. Skip - Use current .env configuration ✅")
+    
+    print()
+    # Show warnings for invalid providers
+    invalid_providers = [p for p, s in provider_summary.items() if not s["valid"]]
+    if invalid_providers:
+        print("⚠️  Some providers missing API keys. Check your .env file.")
+    
+    max_option = len(provider_options)
+    
+    while True:
+        provider_choice = input(f"\nSelect provider (1-{max_option}, or Enter to skip): ").strip()
+        if provider_choice == "" or provider_choice == skip_option:
+            print("✓ Using default provider from .env")
+            return None
+        
+        # Find selected provider
+        selected_option = None
+        for option_num, provider_id, display_name, description in provider_options:
+            if provider_choice == option_num and provider_id != "skip":
+                selected_option = (provider_id, display_name)
+                break
+        
+        if not selected_option:
+            print(f"❌ Please select 1-{max_option} or press Enter to skip.")
+            continue
+        
+        provider_id, display_name = selected_option
+        
+        # Validate provider configuration
+        is_valid, message = validate_provider_config(provider_id)
+        if not is_valid:
+            print(f"❌ {message}")
+            print("Please configure the required API key in your .env file first.")
+            continue
+        
+        print(f"✓ Selected provider: {display_name}")
+        
+        # Optional model selection for the provider
+        model = show_model_selection_menu(provider_id)
+        
+        return {
+            "provider": provider_id,
+            "model": model
+        }
+
+
+def show_model_selection_menu(provider):
+    """Show model selection menu for the chosen provider"""
+    from src.core.llm.model_config_loader import get_model_config_loader
+    
+    loader = get_model_config_loader()
+    models = loader.get_models_for_provider(provider)
+    
+    if not models:
+        print(f"✓ Using default model for {provider}")
+        return None
+    
+    print(f"\n  🎯 {provider.upper()} MODEL SELECTION:")
+    print("  Available models:")
+    
+    model_list = []
+    for i, (model_id, model_info) in enumerate(models.items(), 1):
+        display_name = model_info.get("display_name", model_id)
+        description = model_info.get("description", "")
+        context_length = model_info.get("context_length", "Unknown")
+        
+        print(f"  {i}. {display_name}")
+        if description:
+            print(f"      {description}")
+        print(f"      Context: {context_length} tokens")
+        
+        # Show additional info for local models
+        if "size_gb" in model_info:
+            size_gb = model_info["size_gb"]
+            print(f"      Size: {size_gb} GB")
+            
+        model_list.append((model_id, display_name))
+    
+    print(f"  {len(model_list) + 1}. Use provider default")
+    
+    while True:
+        choice = input(f"\nSelect model (1-{len(model_list) + 1}): ").strip()
+        
+        if choice == str(len(model_list) + 1) or choice == "":
+            print("✓ Using provider default model")
+            return None
+            
+        try:
+            choice_int = int(choice)
+            if 1 <= choice_int <= len(model_list):
+                selected_model_id = model_list[choice_int - 1][0]  # Get model_id
+                selected_display = model_list[choice_int - 1][1]  # Get display_name
+                print(f"✓ Selected model: {selected_display}")
+                return selected_model_id
+            else:
+                print(f"❌ Please select 1-{len(model_list) + 1}.")
+        except ValueError:
+            print(f"❌ Please enter a valid number (1-{len(model_list) + 1}).")
+
+
 def parse_arguments():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(
@@ -594,6 +743,27 @@ CLI MODE (Advanced users):
         help="Show interactive tech stack selection menu"
     )
     
+    # Get dynamic provider choices from JSON configs
+    try:
+        from src.core.llm.model_config_loader import get_model_config_loader
+        loader = get_model_config_loader()
+        available_providers = loader.get_available_providers()
+    except:
+        available_providers = ["deepseek", "openai", "claude", "groq", "ollama"]
+    
+    parser.add_argument(
+        "--llm-provider",
+        type=str,
+        choices=available_providers,
+        help=f"LLM provider ({', '.join(available_providers)})"
+    )
+    
+    parser.add_argument(
+        "--llm-model",
+        type=str,
+        help="Specific model name for the chosen provider"
+    )
+    
     return parser.parse_args()
 
 
@@ -669,6 +839,25 @@ async def main():
         project_id = args.project_id
         specific_issue = args.issue
         
+        # Handle LLM provider CLI arguments
+        if args.llm_provider:
+            os.environ["LLM_PROVIDER"] = args.llm_provider
+            print(f"LLM Provider: {args.llm_provider.upper()}")
+            
+            if args.llm_model:
+                # Set provider-specific model environment variable
+                if args.llm_provider == "deepseek":
+                    os.environ["DEEPSEEK_MODEL"] = args.llm_model
+                elif args.llm_provider == "openai":
+                    os.environ["OPENAI_MODEL"] = args.llm_model
+                elif args.llm_provider == "claude":
+                    os.environ["CLAUDE_MODEL"] = args.llm_model
+                elif args.llm_provider == "groq":
+                    os.environ["GROQ_MODEL"] = args.llm_model
+                elif args.llm_provider == "ollama":
+                    os.environ["OLLAMA_MODEL"] = args.llm_model
+                print(f"LLM Model: {args.llm_model}")
+        
     else:
         # Interactive mode - show full menu
         config = show_main_menu()
@@ -683,7 +872,25 @@ async def main():
         specific_issue = config["specific_issue"]
         resume_path = config["resume_path"]
         tech_stack = config["tech_stack"]
+        llm_provider = config["llm_provider"]
         debug = config["debug"]
+        
+        # Apply LLM provider configuration if selected
+        if llm_provider:
+            os.environ["LLM_PROVIDER"] = llm_provider["provider"]
+            if llm_provider.get("model"):
+                # Set provider-specific model environment variable
+                provider = llm_provider["provider"]
+                if provider == "deepseek":
+                    os.environ["DEEPSEEK_MODEL"] = llm_provider["model"]
+                elif provider == "openai":
+                    os.environ["OPENAI_MODEL"] = llm_provider["model"]
+                elif provider == "claude":
+                    os.environ["CLAUDE_MODEL"] = llm_provider["model"]
+                elif provider == "groq":
+                    os.environ["GROQ_MODEL"] = llm_provider["model"]
+                elif provider == "ollama":
+                    os.environ["OLLAMA_MODEL"] = llm_provider["model"]
         
         # Show selected configuration
         if mode == "single":
