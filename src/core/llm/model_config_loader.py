@@ -14,7 +14,8 @@ class ModelConfigLoader:
     """Loads and validates model configurations from JSON files."""
     
     def __init__(self):
-        self.config_dir = Path(__file__).parent.parent / "configs" / "models"
+        # Path from src/core/llm/ to src/configs/models  
+        self.config_dir = Path(__file__).parent.parent.parent / "configs" / "models"
         self._configs = {}
         self._loaded = False
     

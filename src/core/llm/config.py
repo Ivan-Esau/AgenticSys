@@ -9,7 +9,8 @@ from dotenv import load_dotenv
 from typing import Optional, Any
 
 # Find the project root (where .env file is located)
-PROJECT_ROOT = Path(__file__).parent.parent.parent
+# Current file is in src/core/llm/, so go up 3 levels to get to project root
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 ENV_FILE = PROJECT_ROOT / '.env'
 
 # Load environment variables from the correct path
@@ -75,20 +76,20 @@ class Config:
         
         # Provider-specific API key requirements
         provider = cls.LLM_PROVIDER.lower()
-        if provider == "deepseek" and not cls.DEEPSEEK_API_KEY:
+        if provider == "deepseek":
             required["DEEPSEEK_API_KEY"] = cls.DEEPSEEK_API_KEY
-        elif provider == "openai" and not cls.OPENAI_API_KEY:
+        elif provider == "openai":
             required["OPENAI_API_KEY"] = cls.OPENAI_API_KEY
-        elif provider == "claude" and not cls.ANTHROPIC_API_KEY:
+        elif provider == "claude":
             required["ANTHROPIC_API_KEY"] = cls.ANTHROPIC_API_KEY
-        elif provider == "groq" and not cls.GROQ_API_KEY:
+        elif provider == "groq":
             required["GROQ_API_KEY"] = cls.GROQ_API_KEY
         # Note: Ollama doesn't require API key (local)
         
         missing = [key for key, value in required.items() if not value]
         
         if missing:
-            print(f"⚠️  Missing required configuration: {', '.join(missing)}")
+            print(f"WARNING: Missing required configuration: {', '.join(missing)}")
             print("Please check your .env file")
             if provider != "ollama":
                 print(f"For {provider.upper()} provider, ensure the corresponding API key is set")
