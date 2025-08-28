@@ -338,56 +338,82 @@ class AgentExecutor:
         return True
     
     def _process_coding_result(self, result: Any) -> bool:
-        """Process coding agent result."""
+        """Process coding agent result - STRICT completion signal required."""
         if not result:
+            print("[AGENT EXECUTOR] ❌ Coding Agent returned empty result")
             return False
         
-        # Check result for success indicators
+        # STRICT: Only accept explicit completion signal
         if isinstance(result, str):
             result_lower = result.lower()
-            if "implementation complete" in result_lower or "completed successfully" in result_lower:
-                print("[AGENT EXECUTOR] ✅ Coding implementation successful")
+            if "coding_phase_complete:" in result_lower:
+                print("[AGENT EXECUTOR] ✅ Coding Phase completed successfully")
                 return True
             elif "error" in result_lower or "failed" in result_lower:
                 print("[AGENT EXECUTOR] ❌ Coding implementation failed")
                 return False
             else:
-                print("[AGENT EXECUTOR] ⚠️ Coding result unclear, assuming success")
-                return True
+                print(f"[AGENT EXECUTOR] ❌ Coding Agent did not provide completion signal")
+                print(f"[AGENT EXECUTOR] Expected: 'CODING_PHASE_COMPLETE: Issue #X...'")
+                print(f"[AGENT EXECUTOR] Got: {result[:200]}...")
+                return False
         
-        return bool(result)  # Fallback to truthiness
+        print("[AGENT EXECUTOR] ❌ Coding Agent returned non-string result")
+        return False
     
     def _process_testing_result(self, result: Any) -> bool:
-        """Process testing agent result."""
-        # Testing failures are typically non-fatal
+        """Process testing agent result - STRICT completion signal required."""
         if not result:
-            print("[AGENT EXECUTOR] ⚠️ Testing had issues but continuing")
-            return True  # Allow continuation even with test issues
+            print("[AGENT EXECUTOR] ❌ Testing Agent returned empty result")
+            return False
         
+        # STRICT: Only accept explicit completion signal
         if isinstance(result, str):
             result_lower = result.lower()
-            if "test" in result_lower and ("complete" in result_lower or "success" in result_lower):
-                print("[AGENT EXECUTOR] ✅ Testing completed successfully")
+            if "testing_phase_complete:" in result_lower:
+                print("[AGENT EXECUTOR] ✅ Testing Phase completed successfully")
                 return True
+            elif "tests_failed:" in result_lower:
+                print("[AGENT EXECUTOR] ⚠️ Testing failed but continuing to Review")
+                return True  # Allow continuation with test failures
+            elif "error" in result_lower or "failed" in result_lower:
+                print("[AGENT EXECUTOR] ❌ Testing implementation failed")
+                return False
+            else:
+                print(f"[AGENT EXECUTOR] ❌ Testing Agent did not provide completion signal")
+                print(f"[AGENT EXECUTOR] Expected: 'TESTING_PHASE_COMPLETE: Issue #X...'")
+                print(f"[AGENT EXECUTOR] Got: {result[:200]}...")
+                return False
         
-        print("[AGENT EXECUTOR] ✅ Testing phase completed")
-        return True  # Testing is generally permissive
+        print("[AGENT EXECUTOR] ❌ Testing Agent returned non-string result")
+        return False
     
     def _process_review_result(self, result: Any, issue_id: Any) -> bool:
-        """Process review agent result."""
+        """Process review agent result - STRICT completion signal required."""
+        if not result:
+            print("[AGENT EXECUTOR] ❌ Review Agent returned empty result")
+            return False
+        
+        # STRICT: Only accept explicit completion signals
         if isinstance(result, str):
-            # Check for pipeline failures
-            if "PIPELINE_FAILED_" in result:
+            result_lower = result.lower()
+            if "review_phase_complete:" in result_lower:
+                print(f"[AGENT EXECUTOR] ✅ Review Phase completed - Issue #{issue_id} merged and closed")
+                return True
+            elif "pipeline_failed_" in result:
                 print(f"[AGENT EXECUTOR] 🚨 Pipeline failure detected: {result}")
                 return False  # This will trigger pipeline failure handling
-                
-            elif "MERGE_COMPLETE" in result:
-                # Successful merge and close
-                print(f"[AGENT EXECUTOR] ✅ Issue #{issue_id} merged and closed")
-                return True
+            elif "error" in result_lower or "failed" in result_lower:
+                print("[AGENT EXECUTOR] ❌ Review implementation failed")
+                return False
+            else:
+                print(f"[AGENT EXECUTOR] ❌ Review Agent did not provide completion signal")
+                print(f"[AGENT EXECUTOR] Expected: 'REVIEW_PHASE_COMPLETE: Issue #{issue_id}...'")
+                print(f"[AGENT EXECUTOR] Got: {result[:200]}...")
+                return False
         
-        # Default processing
-        return bool(result)
+        print("[AGENT EXECUTOR] ❌ Review Agent returned non-string result")
+        return False
     
     def _start_execution_tracking(self, agent_type: str, params: Dict[str, Any]) -> str:
         """Start tracking an agent execution."""

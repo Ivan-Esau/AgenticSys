@@ -84,7 +84,11 @@ class IssueManager:
         checkpoint = self.state_manager.checkpoint()
         
         try:
-            # Execute three-phase workflow
+            print(f"[ISSUE MANAGER] 🎯 STRICT SINGLE-ISSUE MODE: Issue #{issue_id} ONLY")
+            print(f"[ISSUE MANAGER] Phase boundaries: CODING → TESTING → REVIEW")
+            print(f"[ISSUE MANAGER] Each agent must signal completion before next phase")
+            
+            # Execute three-phase workflow with strict boundaries
             success = await self._execute_three_phase_workflow(
                 issue, branch, agent_executor
             )
