@@ -20,6 +20,7 @@ if sys.platform == 'win32':
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
 
+# Import the orchestrator function
 from src.orchestrator.supervisor import run_supervisor
 
 

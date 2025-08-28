@@ -1,28 +1,33 @@
 """
-Supervisor Orchestrator - Implements the Supervisor Pattern from LangGraph
-Single orchestrator that coordinates all specialized agents
+Supervisor Orchestrator - Clean modular design
+Main orchestrator that coordinates specialized modules for workflow management.
 """
 
 import asyncio
 from typing import Dict, Optional, Any
 from pathlib import Path
+from datetime import datetime
 
 from src.core.context.state import get_project_state, ProjectState
-from src.core.llm.utils import extract_json_block
 from src.core.context.state_tools import get_state_aware_tools
 from ..infrastructure.mcp_client import get_common_tools_and_client, SafeMCPClient
-from ..agents import (
-    planning_agent,
-    coding_agent, 
-    testing_agent,
-    review_agent
-)
+
+# Import modular components
+from .validation.task_validator import TaskValidator
+from .validation.issue_validator import IssueValidator
+from .validation.plan_validator import PlanValidator
+from .metrics.performance_tracker import PerformanceTracker
+from .metrics.summary_reporter import SummaryReporter
+from .workflow.pipeline_manager import PipelineManager
+from .workflow.issue_manager import IssueManager
+from .agent_router import AgentRouter
+from .agent_executor import AgentExecutor
 
 
 class Supervisor:
     """
-    Main orchestrator using the Supervisor Pattern.
-    Coordinates specialized agents and manages workflow state.
+    Main orchestrator using modular components.
+    Coordinates specialized modules for clean separation of concerns.
     """
     
     def __init__(self, project_id: str):
@@ -31,20 +36,16 @@ class Supervisor:
         self.tools = None
         self.client = None
         
-        # Track agent performance
-        self.agent_metrics = {
-            "planning": {"calls": 0, "errors": 0},
-            "coding": {"calls": 0, "errors": 0},
-            "testing": {"calls": 0, "errors": 0},
-            "review": {"calls": 0, "errors": 0}
-        }
-        
-        # Pipeline failure tracking for self-healing
-        self.pipeline_retry_counts = {}
-        self.max_pipeline_retries = 3
+        # Initialize modular components
+        self.router = AgentRouter()
+        self.executor = AgentExecutor(project_id, self.state, [])
+        self.performance_tracker = PerformanceTracker()
+        self.summary_reporter = SummaryReporter(project_id, self.state.thread_id)
+        self.pipeline_manager = PipelineManager()
+        self.issue_manager = IssueManager(project_id, self.state)
     
     async def initialize(self):
-        """Initialize tools and client"""
+        """Initialize tools, client, and all modular components"""
         # Get MCP tools
         mcp_tools, client = await get_common_tools_and_client()
         
@@ -57,9 +58,16 @@ class Supervisor:
         # Combine MCP tools with state-aware tools
         self.tools = mcp_tools + state_tools
         
+        # Update executor with tools
+        self.executor.tools = self.tools
+        
         print(f"\n[SUPERVISOR] Initialized for project {self.project_id}")
         print(f"[THREAD] {self.state.thread_id}")
         print(f"[TOOLS] {len(mcp_tools)} MCP tools + {len(state_tools)} state-aware tools")
+        print(f"[MODULES] Router, Executor, Performance, Summary, Pipeline, Issue managers loaded")
+        
+        # Set execution mode for reporting
+        self.summary_reporter.set_execution_mode("supervisor_orchestration")
         
         # Fetch project info to get actual default branch
         await self._fetch_project_info()
@@ -77,8 +85,6 @@ class Supervisor:
             if get_project_tool:
                 # Get project info
                 project_info = await get_project_tool.ainvoke({"project_id": self.project_id})
-                print(f"[DEBUG] Project info type: {type(project_info)}")
-                print(f"[DEBUG] Project info content: {str(project_info)[:200]}...")
                 
                 if isinstance(project_info, dict):
                     self.state.project_info = project_info
@@ -97,12 +103,8 @@ class Supervisor:
                         if 'default_branch' in parsed_info:
                             self.state.default_branch = parsed_info['default_branch']
                             print(f"[PROJECT] Default branch: {self.state.default_branch}")
-                        else:
-                            print(f"[PROJECT] Using default branch: {self.state.default_branch}")
                     except json.JSONDecodeError:
                         print(f"[PROJECT] Could not parse project info as JSON")
-                else:
-                    print(f"[PROJECT] Could not parse project info - unexpected type: {type(project_info)}")
             else:
                 print(f"[PROJECT] get_project tool not found, using default branch: {self.state.default_branch}")
                 
@@ -112,307 +114,156 @@ class Supervisor:
     
     async def route_task(self, task_type: str, **kwargs) -> Any:
         """
-        Route task to appropriate agent based on type.
-        This is the core of the supervisor pattern.
+        Route task to appropriate agent using modular routing system.
         """
-        self.agent_metrics[task_type]["calls"] += 1
+        # Use router to validate and get routing decision
+        routing_result = self.router.route_task(task_type, **kwargs)
+        
+        if not routing_result["success"]:
+            raise ValueError(routing_result["error"])
+        
+        # Start performance tracking
+        timing_id = self.performance_tracker.start_task_timing(routing_result["agent"], task_type)
         
         try:
+            print(f"\n[SUPERVISOR] 🎯 Routing {task_type.upper()} task to {routing_result['agent']} agent...")
+            
+            # Route to appropriate executor method
+            result = None
             if task_type == "planning":
-                return await self._run_planning(**kwargs)
+                result = await self.executor.execute_planning_agent(**kwargs)
             elif task_type == "coding":
-                return await self._run_coding(**kwargs)
+                result = await self.executor.execute_coding_agent(**kwargs)
             elif task_type == "testing":
-                return await self._run_testing(**kwargs)
+                result = await self.executor.execute_testing_agent(**kwargs)
             elif task_type == "review":
-                return await self._run_review(**kwargs)
-            else:
-                raise ValueError(f"Unknown task type: {task_type}")
+                result = await self.executor.execute_review_agent(**kwargs)
+            
+            # End performance tracking
+            self.performance_tracker.end_task_timing(timing_id, success=bool(result))
+            
+            # Mark task completion in router
+            self.router.complete_task(routing_result["agent"], success=bool(result))
+            
+            return result
                 
         except Exception as e:
-            self.agent_metrics[task_type]["errors"] += 1
-            print(f"[ERROR] Agent {task_type} failed: {e}")
-            raise
-    
-    async def _run_planning(self, apply: bool = False) -> bool:
-        """Run planning agent and update state"""
-        print("\n[SUPERVISOR] Delegating to Planning Agent...")
-        
-        # Set handoff context
-        self.state.set_handoff(
-            "supervisor",
-            "planning",
-            {"task": "analyze_and_plan", "apply": apply}
-        )
-        
-        # Run planning agent with supervisor's tools
-        result = await planning_agent.run(
-            project_id=self.project_id,
-            tools=self.tools,
-            apply=apply,
-            show_tokens=True
-        )
-        
-        # Extract and cache plan
-        if result:
-            plan = extract_json_block(result)
-            if plan:
-                self.state.plan = plan
-                self.state.issues = plan.get("issues", [])
-                self.state.implementation_order = plan.get("implementation_order", [])
-                print(f"[STATE] Cached plan with {len(self.state.issues)} issues")
-                return True
-        
-        return False
-    
-    async def _run_coding(self, issue: Dict = None, branch: str = None, fix_mode: bool = False, error_context: str = "") -> bool:
-        """Run coding agent for an issue or pipeline fix"""
-        if fix_mode:
-            print(f"\n[SUPERVISOR] Delegating Pipeline Fix to Coding Agent...")
-            issues_list = [f"PIPELINE_FIX: {error_context}"]
-        else:
-            issue_id = issue.get("iid")
-            print(f"\n[SUPERVISOR] Delegating Issue #{issue_id} to Coding Agent...")
-            issues_list = [issue.get("title", "")]
+            # End performance tracking with error
+            self.performance_tracker.end_task_timing(timing_id, success=False, error=str(e))
             
-            # Update state for regular issue
-            self.state.current_issue = issue_id
-            self.state.current_branch = branch
-            self.state.update_issue_status(issue_id, "in_progress")
-        
-        # Set handoff context with cached file info
-        self.state.set_handoff(
-            "supervisor",
-            "coding",
-            {
-                "issue": issue,
-                "branch": branch,
-                "cached_files": list(self.state.file_cache.keys()),
-                "fix_mode": fix_mode,
-                "error_context": error_context
-            }
-        )
-        
-        # Run coding agent with supervisor's tools
-        result = await coding_agent.run(
-            project_id=self.project_id,
-            work_branch=branch,
-            issues=issues_list,
-            plan_json=self.state.plan,
-            tools=self.tools,
-            show_tokens=True,
-            fix_mode=fix_mode,
-            error_context=error_context
-        )
-        
-        if result:
-            # Check if coding agent completed successfully
-            if "IMPLEMENTATION COMPLETE" in result or "implementation complete" in result.lower():
-                print("[✓] Coding phase completed successfully")
-                return True
-            elif "error" in result.lower() or "failed" in result.lower():
-                print("[!] Coding phase encountered errors")
-                return False
-            else:
-                print("[!] Coding phase result unclear, proceeding...")
-                return True
-        
-        return False
-    
-    async def _run_testing(self, issue: Dict = None, branch: str = None, fix_mode: bool = False, error_context: str = "") -> bool:
-        """Run testing agent for an issue or pipeline fix"""
-        if fix_mode:
-            print(f"\n[SUPERVISOR] Delegating Test Fix to Testing Agent...")
-        else:
-            issue_id = issue.get("iid")
-            print(f"\n[SUPERVISOR] Delegating tests for Issue #{issue_id} to Testing Agent...")
-        
-        # Set handoff from coding to testing
-        self.state.set_handoff(
-            "coding" if not fix_mode else "supervisor",
-            "testing",
-            {
-                "issue": issue,
-                "branch": branch,
-                "implementation_complete": True
-            }
-        )
-        
-        # Run testing agent with supervisor's tools
-        result = await testing_agent.run(
-            project_id=self.project_id,
-            work_branch=branch,
-            plan_json=self.state.plan,
-            tools=self.tools,
-            show_tokens=True,
-            fix_mode=fix_mode,
-            error_context=error_context
-        )
-        
-        return bool(result)
-    
-    async def _run_review(self, issue: Dict, branch: str) -> bool:
-        """Run review agent to merge branch"""
-        issue_id = issue.get("iid")
-        print(f"\n[SUPERVISOR] Delegating merge of Issue #{issue_id} to Review Agent...")
-        
-        # Set handoff from testing to review
-        self.state.set_handoff(
-            "testing",
-            "review",
-            {
-                "issue": issue,
-                "branch": branch,
-                "tests_complete": True,
-                "ready_to_merge": True
-            }
-        )
-        
-        # Run review agent with supervisor's tools
-        result = await review_agent.run(
-            project_id=self.project_id,
-            work_branch=branch,
-            plan_json=self.state.plan,
-            tools=self.tools,
-            show_tokens=True
-        )
-        
-        # Handle different review agent outcomes
-        if isinstance(result, str):
-            # Check for pipeline failure patterns
-            if "PIPELINE_FAILED_" in result:
-                failure_parts = result.split(": ", 1)
-                failure_type = failure_parts[0]
-                error_details = failure_parts[1] if len(failure_parts) > 1 else ""
-                
-                print(f"[SUPERVISOR] 🚨 Pipeline failure detected: {failure_type}")
-                
-                # Attempt self-healing
-                healing_success = await self._handle_pipeline_failure(failure_type, error_details, branch)
-                
-                if healing_success:
-                    print("[SUPERVISOR] ✅ Self-healing successful, retrying review...")
-                    # Retry review after fixing
-                    return await self._run_review(issue, branch)
-                else:
-                    print("[SUPERVISOR] ❌ Self-healing failed, escalating issue")
-                    return False
-                    
-            elif "MERGE_COMPLETE" in result:
-                # Issue was successfully completed and closed by review agent
-                self.state.update_issue_status(issue_id, "complete")
-                print(f"[SUPERVISOR] ✅ Issue #{issue_id} completed and closed")
-                return True
-                
-        return False
-    
-    async def _handle_pipeline_failure(self, failure_type: str, error_details: str, branch: str) -> bool:
-        """Handle pipeline failures with intelligent routing"""
-        retry_key = f"{branch}_{failure_type}"
-        retry_count = self.pipeline_retry_counts.get(retry_key, 0)
-        
-        if retry_count >= self.max_pipeline_retries:
-            print(f"\n[SUPERVISOR] ❌ Maximum retries reached for {failure_type} on {branch}")
-            return False
+            # Mark task completion as failed
+            self.router.complete_task(routing_result["agent"], success=False)
             
-        self.pipeline_retry_counts[retry_key] = retry_count + 1
-        print(f"\n[SUPERVISOR] 🔄 Handling {failure_type} (attempt {retry_count + 1}/{self.max_pipeline_retries})")
-        
-        # Route failure to appropriate agent
-        if failure_type == "PIPELINE_FAILED_TESTS":
-            print("[SUPERVISOR] → Routing to Testing Agent for test fixes")
-            return await self._run_testing(branch, fix_mode=True, error_context=error_details)
+            # Record error for reporting
+            self.summary_reporter.record_error(str(e), routing_result["agent"])
             
-        elif failure_type in ["PIPELINE_FAILED_BUILD", "PIPELINE_FAILED_LINT", "PIPELINE_FAILED_DEPLOY"]:
-            print("[SUPERVISOR] → Routing to Coding Agent for implementation fixes")
-            return await self._run_coding(branch, fix_mode=True, error_context=error_details)
+            print(f"[ERROR] ❌ Agent {task_type} failed: {e}")
             
-        else:
-            print(f"[SUPERVISOR] ⚠️ Unknown failure type: {failure_type}")
-            return False
-    
+            # Attempt recovery
+            recovery_result = await self._attempt_recovery(task_type, e, **kwargs)
+            if recovery_result:
+                print(f"[SUPERVISOR] ✅ Recovery successful for {task_type}")
+                return recovery_result
+            
+            raise Exception(f"Task {task_type} failed and recovery unsuccessful: {e}")
     
     async def implement_issue(self, issue: Dict) -> bool:
         """
-        Complete workflow for implementing a single issue.
-        Coordinates all agents in sequence.
+        Implement a single issue using the modular issue manager.
         """
         issue_id = issue.get("iid")
-        issue_title = issue.get("title", "Unknown")
         
-        print("\n" + "="*60)
-        print(f"[ISSUE #{issue_id}] {issue_title}")
-        print("="*60)
+        # Validate issue structure using validator
+        if not IssueValidator.validate_issue_structure(issue):
+            self.summary_reporter.record_error(f"Invalid issue structure for #{issue_id}", "validation")
+            return False
         
-        # Check if already complete
-        if not self.state.should_implement_issue(issue_id):
-            print(f"[SKIP] Issue #{issue_id} already complete")
-            return True
+        # Validate dependencies
+        if not IssueValidator.validate_issue_dependencies(
+            issue, 
+            self.state.plan, 
+            self.state.implementation_status
+        ):
+            self.summary_reporter.record_error(f"Dependencies not met for issue #{issue_id}", "validation")
+            return False
         
-        # Let coding agent handle branch creation from issue
-        # Pass issue info and let coding agent create proper branch name
-        branch = f"feature/issue-{issue_id}"  # Temporary, coding agent will create actual branch
+        # Record issue processing start
+        self.summary_reporter.record_issue_processed(issue, "started")
         
-        # Mark issue as in progress
-        print(f"[SUPERVISOR] Setting Issue #{issue_id} to in_progress status")
+        # Delegate to issue manager for full workflow
+        result = await self.issue_manager.implement_issue(issue, self.executor)
         
-        # Create checkpoint before starting
-        checkpoint = self.state.checkpoint()
+        # Record final status
+        final_status = "complete" if result else "failed"
+        self.summary_reporter.record_issue_processed(issue, final_status)
+        
+        return result
+    
+    async def _handle_pipeline_failure(self, failure_result: str, branch: str) -> bool:
+        """
+        Handle pipeline failures using the pipeline manager.
+        """
+        return await self.pipeline_manager.handle_pipeline_failure(
+            failure_result, branch, self.executor
+        )
+    
+    async def _attempt_recovery(self, task_type: str, error: Exception, **kwargs) -> Any:
+        """Attempt recovery from task failures using simple strategies."""
+        error_str = str(error).lower()
         
         try:
-            # Phase 1: Coding (handles branch creation and issue status)
-            print("\n[PHASE 1/3] CODING")
-            if not await self.route_task("coding", issue=issue, branch=branch):
-                raise Exception("Coding phase failed")
-            print("[✓] Coding complete")
+            # Network/connection errors
+            if "network" in error_str or "connection" in error_str or "timeout" in error_str:
+                print(f"[SUPERVISOR] 🔄 Attempting recovery for network error...")
+                await asyncio.sleep(5)  # Wait and retry
+                return None  # Return None to trigger retry
             
-            # Brief pause
-            await asyncio.sleep(1)
-            
-            # Phase 2: Testing
-            print("\n[PHASE 2/3] TESTING")
-            try:
-                if not await self.route_task("testing", issue=issue, branch=branch):
-                    print("[!] Testing had issues but continuing...")
-                else:
-                    print("[✓] Testing complete")
-            except Exception as e:
-                print(f"[!] Testing failed: {e} - continuing to review...")
-            
-            # Brief pause
-            await asyncio.sleep(1)
-            
-            # Phase 3: Review & Merge
-            print("\n[PHASE 3/3] REVIEW & MERGE")
-            if not await self.route_task("review", issue=issue, branch=branch):
-                raise Exception("Merge failed")
-            print("[✓] Merge complete")
-            
-            print(f"\n[SUCCESS] Issue #{issue_id} fully implemented!")
-            return True
-            
-        except Exception as e:
-            print(f"\n[ERROR] Failed to implement issue #{issue_id}: {e}")
-            self.state.update_issue_status(issue_id, "failed")
-            # Could restore from checkpoint here if needed
-            return False
+            # Model/LLM errors
+            elif "unsupported provider" in error_str or "model" in error_str:
+                print(f"[SUPERVISOR] 🔄 Attempting recovery for model error...")
+                return None
+                
+            # GitLab API errors
+            elif "404" in error_str or "gitlab" in error_str:
+                print(f"[SUPERVISOR] 🔄 Attempting recovery for GitLab API error...")
+                await asyncio.sleep(3)
+                return None
+                
+            else:
+                print(f"[SUPERVISOR] ❌ No recovery strategy for: {error_str[:100]}")
+                return None
+                
+        except Exception as recovery_error:
+            print(f"[SUPERVISOR] ❌ Recovery attempt failed: {recovery_error}")
+            return None
     
     async def run(self, mode: str = "analyze", specific_issue: Optional[str] = None):
         """
-        Main orchestration entry point.
+        Main orchestration entry point using modular components.
         
         Modes:
         - analyze: Just analyze and plan
         - implement: Full implementation
         - single: Implement specific issue
         """
+        # Validate mode
+        valid_modes = {"analyze", "implement", "single", "resume"}
+        if mode not in valid_modes:
+            raise ValueError(f"Invalid mode: {mode}. Valid modes: {valid_modes}")
+        
         print("\n" + "="*60)
-        print("SUPERVISOR ORCHESTRATOR")
+        print("SUPERVISOR ORCHESTRATOR (MODULAR)")
         print("="*60)
         print(f"Project: {self.project_id}")
         print(f"Mode: {mode}")
         
-        await self.initialize()
+        # Initialize with validation
+        try:
+            await self.initialize()
+        except Exception as e:
+            print(f"[SUPERVISOR] ❌ Initialization failed: {e}")
+            self.summary_reporter.record_error(str(e), "initialization")
+            return
         
         # Phase 1: Planning (always run to get context)
         print("\n" + "="*60)
@@ -426,6 +277,7 @@ class Supervisor:
             success = await self.route_task("planning", apply=apply_changes)
             if not success:
                 print("[ERROR] Planning failed")
+                self.summary_reporter.record_error("Planning phase failed", "planning")
                 return
         else:
             print("[CACHED] Using existing plan from state")
@@ -460,22 +312,29 @@ class Supervisor:
         
         print(f"[PLAN] Will implement {len(issues_to_implement)} issues")
         
-        # Implement each issue
+        # Implement each issue using issue manager
         for idx, issue in enumerate(issues_to_implement, 1):
             print(f"\n[PROGRESS] {idx}/{len(issues_to_implement)}")
             
+            # Use modular issue implementation
             success = await self.implement_issue(issue)
             
             if not success:
-                print(f"[WARNING] Issue #{issue['iid']} failed, continuing...")
+                print(f"[WARNING] ❌ Issue #{issue['iid']} failed")
+            else:
+                print(f"[SUCCESS] ✅ Issue #{issue['iid']} completed successfully")
             
             # Checkpoint after each issue
-            self.state.checkpoint()
+            try:
+                self.state.checkpoint()
+                self.summary_reporter.increment_checkpoints()
+            except Exception as e:
+                print(f"[WARNING] Checkpoint failed: {e}")
             
             # Brief pause between issues
             if idx < len(issues_to_implement):
-                print("\n[PAUSE] 2 seconds...")
-                await asyncio.sleep(2)
+                print("\n[PAUSE] 3 seconds between issues...")
+                await asyncio.sleep(3)
         
         # Phase 3: Summary
         await self._show_summary()
@@ -484,46 +343,55 @@ class Supervisor:
         state_file = self.state.save_to_file()
         print(f"\n[STATE] Saved to {state_file}")
         
-        # Clean up MCP client at the end
+        # Clean up MCP client
         await self.cleanup()
     
     async def cleanup(self):
         """Clean up resources managed by the supervisor."""
+        self.summary_reporter.finalize_execution()
+        
         if self.client:
-            # SafeMCPClient handles all error suppression internally
             await self.client.close()
-            # The SafeMCPClient will print the clean close message
     
     async def _show_summary(self):
-        """Show execution summary"""
+        """Show execution summary using summary reporter"""
         print("\n" + "="*60)
-        print("SUMMARY")
+        print("EXECUTION SUMMARY (MODULAR)")
         print("="*60)
         
-        summary = self.state.get_summary()
-        print(f"Project: {summary['project_id']}")
-        print(f"Thread: {summary['thread_id']}")
-        print(f"Issues: {summary['completed_issues']}/{summary['total_issues']} complete")
-        print(f"Cached Files: {summary['cached_files']}")
-        print(f"Checkpoints: {summary['checkpoints']}")
+        # Get metrics from various components
+        state_info = self.state.get_summary()
+        agent_metrics = self.performance_tracker.get_agent_metrics()
+        router_stats = self.router.get_routing_statistics()
+        pipeline_stats = self.pipeline_manager.get_failure_statistics()
+        issue_stats = self.issue_manager.get_issue_statistics()
         
-        # Show file status
-        file_status = summary['file_status']
-        print(f"File Status: Empty={file_status['empty']}, "
-              f"Partial={file_status['partial']}, "
-              f"Complete={file_status['complete']}")
+        # Use summary reporter for console output
+        self.summary_reporter.print_console_summary(
+            state_info=state_info,
+            agent_metrics=agent_metrics,
+            include_details=True
+        )
         
-        # Show agent metrics
-        print("\nAgent Metrics:")
-        for agent, metrics in self.agent_metrics.items():
-            if metrics["calls"] > 0:
-                error_rate = (metrics["errors"] / metrics["calls"]) * 100
-                print(f"  {agent}: {metrics['calls']} calls, "
-                      f"{metrics['errors']} errors ({error_rate:.1f}%)")
+        # Show additional modular component stats
+        print("\n" + "="*40)
+        print("MODULE STATISTICS")
+        print("="*40)
         
-        print("\n[COMPLETE] Orchestration finished")
+        print(f"Router Efficiency: {router_stats.get('routing_efficiency', 0):.2f}")
+        print(f"Pipeline Recovery Rate: {pipeline_stats.get('recovery_rate', 0):.2f}")
+        print(f"Issue Success Rate: {issue_stats.get('success_rate', 0):.2f}")
+        
+        # Show recommendations
+        if router_stats.get('recommendations'):
+            print("\nRecommendations:")
+            for rec in router_stats['recommendations'][:3]:
+                print(f"  • {rec}")
+        
+        print("\n[COMPLETE] Modular orchestration finished")
 
 
+# Main entry function using the clean modular supervisor
 async def run_supervisor(
     project_id: str,
     mode: str = "analyze",

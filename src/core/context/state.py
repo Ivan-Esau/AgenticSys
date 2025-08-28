@@ -123,6 +123,10 @@ class ProjectState:
             "timestamp": datetime.now().isoformat()
         }
     
+    def clear_handoff(self) -> None:
+        """Clear handoff context after successful agent transition"""
+        self.handoff_context = {}
+    
     def get_handoff(self, agent_name: str) -> Optional[Dict]:
         """Get handoff context if this agent is the recipient"""
         if self.handoff_context.get("to") == agent_name:
