@@ -298,3 +298,29 @@ class PerformanceTracker:
                 }
             
             self.execution_history = []
+    
+    def get_performance_summary(self) -> str:
+        """
+        Get a human-readable performance summary string.
+        
+        Returns:
+            str: Formatted performance summary
+        """
+        if not any(metrics["calls"] > 0 for metrics in self.agent_metrics.values()):
+            return "No performance data available"
+        
+        summary_lines = []
+        
+        for agent_name, metrics in self.agent_metrics.items():
+            if metrics["calls"] == 0:
+                continue
+            
+            derived = self._calculate_derived_metrics(agent_name, metrics)
+            
+            summary_lines.append(
+                f"{agent_name}: {metrics['calls']} calls, "
+                f"{derived['success_rate']:.1%} success rate, "
+                f"{derived['avg_execution_time']:.1f}s avg time"
+            )
+        
+        return "; ".join(summary_lines)

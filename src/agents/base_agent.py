@@ -6,10 +6,8 @@ Lightweight coordinator using specialized modules for caching, streaming, and to
 from typing import Optional, List, Any
 from src.core.llm.config import Config
 from src.core.llm.llm_config import make_model
-from src.core.context.state import get_project_state, ProjectState
-from .core.cache_manager import CacheManager
+# Removed broken state tools and cache systems
 from .core.stream_manager import StreamManager
-from .core.tool_wrapper import ToolWrapper
 
 # LangGraph for agent creation
 from langgraph.prebuilt import create_react_agent
@@ -33,16 +31,11 @@ class BaseAgent:
         self.system_prompt = system_prompt
         self.project_id = project_id
         
-        # Get project state for caching and coordination
-        self.state = get_project_state(project_id) if project_id else None
-        
-        # Initialize modular components
-        self.cache_manager = CacheManager(self.state)
+        # Initialize modular components (removed broken caching)
         self.stream_manager = StreamManager(name)
-        self.tool_wrapper = ToolWrapper(self.cache_manager)
         
-        # Wrap tools with caching capability
-        wrapped_tools = self.tool_wrapper.wrap_tools_with_cache(tools)
+        # Use tools directly (removed broken caching wrapper)
+        wrapped_tools = tools
         
         # Create LLM model
         if model is None:
@@ -90,7 +83,7 @@ class BaseAgent:
             if show_tokens:
                 print(f"[{self.name.upper()}] Streaming failed, using non-streaming mode...")
             
-            result = await self.agent.ainvoke(inputs)
+            result = await self.agent.ainvoke(inputs, config={"recursion_limit": Config.AGENT_RECURSION_LIMIT})
             
             # Extract content from result
             if isinstance(result, dict) and "messages" in result:
@@ -121,7 +114,7 @@ class BaseAgent:
         """
         try:
             # Create async stream
-            stream = self.agent.astream_events(inputs, version="v2")
+            stream = self.agent.astream_events(inputs, version="v2", config={"recursion_limit": Config.AGENT_RECURSION_LIMIT})
             
             # Handle stream events using stream manager
             final_content = await self.stream_manager.handle_stream_events(stream, show_tokens)
@@ -132,12 +125,10 @@ class BaseAgent:
             # Let the caller handle fallback
             raise
     
-    def get_cache_stats(self) -> dict:
-        """Get caching statistics from cache manager."""
-        return self.cache_manager.get_cache_stats()
-    
-    def get_state_summary(self) -> dict:
-        """Get state summary if available."""
-        if self.state:
-            return self.state.get_summary()
-        return {"project_id": self.project_id, "state": "not_available"}
+    def get_agent_info(self) -> dict:
+        """Get basic agent information."""
+        return {
+            "name": self.name, 
+            "project_id": self.project_id,
+            "tools_count": len(self.tools) if hasattr(self, 'tools') else 0
+        }

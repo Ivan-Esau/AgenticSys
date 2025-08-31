@@ -54,8 +54,9 @@ class StreamManager:
                     final_content = self._extract_final_content(data)
                     
         except Exception as e:
-            # Silently catch streaming errors - will fall back to non-streaming
-            pass
+            # Log streaming errors and let the agent fall back to non-streaming
+            print(f"[STREAM] Stream error: {e}")
+            raise
         
         return final_content
     
@@ -105,7 +106,14 @@ class StreamManager:
             content = chunk.get("content") if isinstance(chunk, dict) else None
         
         if content:
-            print(content, end="", flush=True)
+            # Filter out verbose JSON blocks and show only important updates
+            if "```json" in content or '"issues": [' in content or '"implementation_steps"' in content:
+                # Don't stream verbose JSON content, just show progress indicator
+                if not hasattr(self, '_json_suppressed'):
+                    print("[Generating orchestration plan...]", end="", flush=True)
+                    self._json_suppressed = True
+            else:
+                print(content, end="", flush=True)
     
     def _extract_final_content(self, data: Dict[str, Any]) -> Optional[str]:
         """Extract final content from model end event."""

@@ -24,7 +24,7 @@ class IssueManager:
     
     def __init__(self, project_id: str, state_manager: Any):
         self.project_id = project_id
-        self.state_manager = state_manager
+        # state_manager removed (was broken state system)
         self.current_issue = None
         self.issue_start_time = None
         
@@ -80,8 +80,7 @@ class IssueManager:
         print(f"[ISSUE MANAGER] Setting Issue #{issue_id} to in_progress status")
         self._update_issue_status(issue_id, IssueStatus.IN_PROGRESS)
         
-        # Create checkpoint before starting
-        checkpoint = self.state_manager.checkpoint()
+        # Checkpoint creation removed (was broken state system)
         
         try:
             print(f"[ISSUE MANAGER] 🎯 STRICT SINGLE-ISSUE MODE: Issue #{issue_id} ONLY")
@@ -132,14 +131,7 @@ class IssueManager:
         if not IssueValidator.validate_issue_structure(issue):
             return False
         
-        # Dependency validation
-        if not IssueValidator.validate_issue_dependencies(
-            issue, 
-            self.state_manager.plan,
-            self.state_manager.implementation_status
-        ):
-            return False
-        
+        # Basic validation only - dependency checking removed with broken state system
         return True
     
     async def _execute_three_phase_workflow(
@@ -220,8 +212,7 @@ class IssueManager:
         
         result = await agent_executor.execute_coding_agent(
             issue=issue,
-            branch=branch,
-            fix_mode=False  # Regular implementation, not fix mode
+            branch=branch
         )
         
         if result:
@@ -250,8 +241,7 @@ class IssueManager:
         
         result = await agent_executor.execute_testing_agent(
             issue=issue,
-            branch=branch,
-            fix_mode=False
+            branch=branch
         )
         
         if result:
@@ -303,11 +293,13 @@ class IssueManager:
     
     def _should_implement_issue(self, issue_id: Any) -> bool:
         """Check if issue should be implemented."""
-        return self.state_manager.should_implement_issue(str(issue_id))
+        # Always implement - state checking removed with broken state system
+        return True
     
     def _update_issue_status(self, issue_id: Any, status: str):
         """Update issue status in state manager."""
-        self.state_manager.update_issue_status(str(issue_id), status)
+        # Status updates removed with broken state system
+        print(f"[ISSUE MANAGER] Status update: Issue #{issue_id} → {status}")
     
     def _record_issue_completion(
         self,
