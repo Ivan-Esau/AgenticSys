@@ -1,10 +1,21 @@
 services:
   gitlab-mcp:
-    image: iwakitakuma/gitlab-mcp
+    image: iwakitakuma/gitlab-mcp:latest
+    pull_policy: always
     env_file: .env
     environment:
       SSE: "true"
       STREAMABLE_HTTP: "true"
+      # Enable pipeline tools (key variable from repository docs)
+      USE_PIPELINE: "true"
+      # Set log level for debugging
+      LOG_LEVEL: "info"
     ports:
       - "3333:3002"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
