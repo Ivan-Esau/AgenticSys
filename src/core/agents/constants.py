@@ -47,12 +47,12 @@ PATTERNS = {
 
 # Limits and Thresholds
 LIMITS = {
-    "MAX_ISSUES": 10,
+    "MAX_ISSUES": 100,
     "MAX_RETRIES": 3,
-    "CHUNK_SIZE": 4000,
-    "MAX_OUTPUT_LENGTH": 10000,
-    "TRUNCATE_LENGTH": 1000,
-    "STREAM_TIMEOUT": 300  # seconds
+    "CHUNK_SIZE": 40000,
+    "MAX_OUTPUT_LENGTH": 100000,
+    "TRUNCATE_LENGTH": 10000,
+    "STREAM_TIMEOUT": 30000  # seconds
 }
 
 # Default Values

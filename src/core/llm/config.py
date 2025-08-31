@@ -22,7 +22,7 @@ class Config:
     
     # GitLab Configuration
     GITLAB_URL: str = os.getenv("GITLAB_URL", "https://gitlab.com")
-    GITLAB_TOKEN: str = os.getenv("GITLAB_TOKEN", "")
+    GITLAB_PERSONAL_ACCESS_TOKEN: str = os.getenv("GITLAB_PERSONAL_ACCESS_TOKEN", "")
     GITLAB_PROJECT_ID: Optional[str] = os.getenv("GITLAB_PROJECT_ID")
     
     # MCP Server Configuration
@@ -71,7 +71,7 @@ class Config:
         # Always required
         required = {
             "GITLAB_URL": cls.GITLAB_URL,
-            "GITLAB_TOKEN": cls.GITLAB_TOKEN,
+            "GITLAB_PERSONAL_ACCESS_TOKEN": cls.GITLAB_PERSONAL_ACCESS_TOKEN,
         }
         
         # Provider-specific API key requirements
