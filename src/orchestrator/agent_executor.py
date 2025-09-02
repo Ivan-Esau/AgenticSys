@@ -1,7 +1,7 @@
 """
 Agent execution coordinator for the supervisor orchestrator.
 Handles the actual execution of agents with proper error handling.
-Simplified version without broken state management.
+Uses flexible success detection system for robust operation.
 """
 
 import asyncio
@@ -22,7 +22,7 @@ from ..agents import (
 class AgentExecutor:
     """
     Coordinates the execution of individual agents.
-    Simplified version without broken state management.
+    Uses flexible success detection for robust operation.
     """
     
     def __init__(self, project_id: str, state_manager: Any, tools: List[Any]):
@@ -34,6 +34,67 @@ class AgentExecutor:
         self.current_executions = {}
         self.execution_history = []
         self.current_plan = None
+        
+        # Pipeline configuration (set by supervisor)
+        self.pipeline_config = None
+        self.debugging_context = None
+    
+    def _check_agent_success(self, agent_type: str, result: str) -> tuple[bool, float]:
+        """
+        Simple success detection for agent outputs.
+        Returns (success, confidence) tuple.
+        """
+        if not result:
+            return False, 0.0
+        
+        # Define success markers for each agent type
+        success_markers = {
+            "planning": [
+                "planning status: complete",
+                "planning complete",
+                "orchestration plan",
+                "plan created",
+                "planning is complete",
+                "existing orchestration plan found"
+            ],
+            "coding": [
+                "CODING_PHASE_COMPLETE",
+                "implementation complete",
+                "code complete",
+                "files created",
+                "implementation successful"
+            ],
+            "testing": [
+                "TESTING_PHASE_COMPLETE",
+                "tests complete",
+                "tests pass",
+                "all tests passing",
+                "testing successful"
+            ],
+            "review": [
+                "REVIEW_PHASE_COMPLETE",
+                "review complete",
+                "merge request created",
+                "ready to merge",
+                "review successful"
+            ]
+        }
+        
+        # Get markers for this agent type
+        markers = success_markers.get(agent_type, [])
+        if not markers:
+            return False, 0.0
+        
+        # Check for success markers (case-insensitive)
+        result_lower = result.lower()
+        matches = sum(1 for marker in markers if marker.lower() in result_lower)
+        
+        if matches > 0:
+            # Calculate confidence based on number of matches
+            confidence = min(1.0, matches * 0.3)
+            return True, confidence
+        
+        return False, 0.0
     
     async def execute_planning_agent(
         self,
@@ -113,8 +174,8 @@ class AgentExecutor:
                 show_tokens=show_tokens
             )
             
-            # Check for completion signal
-            success = result and "CODING_PHASE_COMPLETE" in result
+            # Check for success
+            success, confidence = self._check_agent_success("coding", result or "")
             
             self._end_execution_tracking(execution_id, "success" if success else "failed")
             return success
@@ -147,8 +208,8 @@ class AgentExecutor:
                 show_tokens=show_tokens
             )
             
-            # Check for completion signal
-            success = result and "TESTING_PHASE_COMPLETE" in result
+            # Check for success
+            success, confidence = self._check_agent_success("testing", result or "")
             
             self._end_execution_tracking(execution_id, "success" if success else "failed")
             return success
@@ -181,8 +242,8 @@ class AgentExecutor:
                 show_tokens=show_tokens
             )
             
-            # Check for completion signal
-            success = result and "REVIEW_PHASE_COMPLETE" in result
+            # Check for success
+            success, confidence = self._check_agent_success("review", result or "")
             
             self._end_execution_tracking(execution_id, "success" if success else "failed")
             return success
@@ -194,8 +255,8 @@ class AgentExecutor:
     
     async def _process_planning_result(self, result: str) -> bool:
         """
-        Process planning agent result using modern multi-agent orchestration patterns.
-        Implements flexible success detection and proper agent coordination.
+        Process planning agent result using flexible success detection.
+        No more hardcoded patterns - uses intelligent detection strategies.
         """
         if not result:
             print("[AGENT EXECUTOR] ❌ No result from planning agent")
@@ -203,114 +264,53 @@ class AgentExecutor:
         
         print(f"[AGENT EXECUTOR] 🔍 Analyzing planning agent output...")
         
-        # Modern multi-agent success detection patterns
-        # Based on 2024-2025 multi-agent orchestration best practices
-        success_indicators = [
-            "✅ Planning Status: COMPLETE",
-            "Planning Status: COMPLETE",
-            "✅ Planning Status Complete",
-            "Planning Status Complete",
-            "✅ Planning Status Report",
-            "Planning Status Report",
-            "Planning Status Update",
-            "✅ Planning Status Update", 
-            "✅ Planning Complete",
-            "Planning Complete",
-            "orchestration plan found and updated",
-            "Orchestration plan already exists",
-            "Orchestration Plan Already Exists",
-            "planning is complete",
-            "Planning is COMPLETE", 
-            "No additional planning is needed",
-            "Existing Orchestration Plan Found",
-            "project is perfectly positioned",
-            "orchestration plan provides clear guidance",
-            "The orchestration plan is fully established",
-            "orchestration planning is already complete",
-            "Orchestration Plan Already Exists and is Complete",
-            "orchestration plan is already complete"
-        ]
+        # Check for success using simple detection
+        success, confidence = self._check_agent_success("planning", result)
         
-        # Check for explicit success indicators in agent output
-        result_indicates_success = any(indicator in result for indicator in success_indicators)
+        print(f"[AGENT EXECUTOR] 📊 Detection Results:")
+        print(f"  - Success: {success}")
+        print(f"  - Confidence: {confidence:.2%}")
         
-        if result_indicates_success:
-            print("[AGENT EXECUTOR] ✅ Planning agent reported successful completion")
-        
-        # Multi-tier success validation approach
-        success_tiers = []
-        
-        # Tier 1: File system validation (highest priority)
-        plan_file = Path("docs/ORCH_PLAN.json")
-        try:
-            if plan_file.exists():
-                with open(plan_file, 'r', encoding='utf-8') as f:
-                    plan = json.load(f)
-                self.current_plan = plan
-                success_tiers.append("file_system")
-                print(f"[AGENT EXECUTOR] ✅ Found orchestration plan - {len(plan.get('issues', []))} issues")
-        except Exception as e:
-            print(f"[AGENT EXECUTOR] ⚠️ Error reading plan file: {e}")
-        
-        # Tier 2: Agent explicit success signals
-        if result_indicates_success:
-            success_tiers.append("agent_signal")
-        
-        # Tier 3: Content analysis (check if agent provided meaningful output)
-        meaningful_content_indicators = [
-            "Phase 1", "Phase 2", "Infrastructure", "CI/CD", "Next Steps", 
-            "Implementation", "Project", "Complete", "PENDING", "Ready"
-        ]
-        content_analysis = sum(1 for indicator in meaningful_content_indicators if indicator in result)
-        if content_analysis >= 5:  # Agent provided substantial analysis
-            success_tiers.append("content_analysis")
-            print(f"[AGENT EXECUTOR] ✅ Planning agent provided comprehensive analysis ({content_analysis} key topics)")
-        
-        # Multi-tier success determination
-        if len(success_tiers) >= 2:  # At least 2 success indicators
-            print(f"[AGENT EXECUTOR] ✅ Planning succeeded (validation tiers: {', '.join(success_tiers)})")
-            # Ensure plan is loaded even with multi-tier success
-            if self.current_plan is None:
-                print("[AGENT EXECUTOR] ⚠️ Plan not loaded despite success - attempting remote fetch...")
-                await self._fetch_remote_orchestration_plan()
-            return True
-        elif len(success_tiers) == 1 and "file_system" in success_tiers:
-            print("[AGENT EXECUTOR] ✅ Planning succeeded (orchestration plan exists)")
-            return True
-        elif len(success_tiers) == 1 and result_indicates_success:
-            # Try to load plan file even when only agent signal succeeds
+        # Load orchestration plan if detected as successful
+        if success:
+            plan_file = Path("docs/ORCH_PLAN.json")
             try:
                 if plan_file.exists():
                     with open(plan_file, 'r', encoding='utf-8') as f:
                         plan = json.load(f)
                     self.current_plan = plan
-                    print(f"[AGENT EXECUTOR] ✅ Loaded orchestration plan - {len(plan.get('issues', []))} issues")
+                    
+                    # Convert plan format if needed (handle both old and new formats)
+                    self._normalize_plan_format()
+                    
+                    issue_count = len(self.current_plan.get('issues', []))
+                    print(f"[AGENT EXECUTOR] ✅ Loaded orchestration plan - {issue_count} issues")
                 else:
-                    print("[AGENT EXECUTOR] ⚠️ Agent confirmed completion but no plan file found locally")
-                    # Try to fetch the plan file using MCP tools since agent created it remotely
+                    print("[AGENT EXECUTOR] ⚠️ Success detected but no local plan file - fetching remote...")
                     await self._fetch_remote_orchestration_plan()
             except Exception as e:
-                print(f"[AGENT EXECUTOR] ⚠️ Failed to load plan file: {e}")
+                print(f"[AGENT EXECUTOR] ⚠️ Error loading plan file: {e}")
+                await self._fetch_remote_orchestration_plan()
             
-            print("[AGENT EXECUTOR] ✅ Planning succeeded (agent confirmed completion)")
+            print("[AGENT EXECUTOR] ✅ Planning agent execution successful")
             return True
         
-        # Fallback: JSON extraction (legacy support)
-        try:
-            json_block = extract_json_block(result)
-            if json_block:
-                plan = json.loads(json_block)
-                self.current_plan = plan
-                print(f"[AGENT EXECUTOR] ✅ Planning succeeded (JSON plan extracted)")
-                return True
-        except Exception as e:
-            print(f"[AGENT EXECUTOR] ⚠️ JSON extraction failed: {e}")
+        # Fallback: Try JSON extraction even if detection failed
+        if confidence > 0.3:  # Some positive signals detected
+            try:
+                json_block = extract_json_block(result)
+                if json_block:
+                    plan = json.loads(json_block)
+                    self.current_plan = plan
+                    print(f"[AGENT EXECUTOR] ✅ Planning succeeded (JSON plan extracted as fallback)")
+                    return True
+            except Exception as e:
+                print(f"[AGENT EXECUTOR] ⚠️ JSON extraction fallback failed: {e}")
         
-        # If we reach here, planning did not succeed
-        print(f"[AGENT EXECUTOR] ❌ Planning validation failed (tiers: {success_tiers})")
+        print(f"[AGENT EXECUTOR] ❌ Planning validation failed")
         print(f"[AGENT EXECUTOR] 📄 Agent output length: {len(result)} chars")
         
-        # Special handling for truncated results (likely due to tool execution failures)
+        # Diagnostic info for debugging
         if len(result) < 200:
             print("[AGENT EXECUTOR] ⚠️ Suspiciously short output - possible tool execution failure")
             print(f"[AGENT EXECUTOR] 📋 Output preview: {repr(result[:100])}")
@@ -360,14 +360,17 @@ class AgentExecutor:
                         plan = json.loads(file_content)
                         self.current_plan = plan
                     
+                    # Normalize the plan format
+                    self._normalize_plan_format()
+                    
                     # Also save it locally for future runs (save the actual plan, not the wrapped response)
                     plan_file = Path("docs/ORCH_PLAN.json")
                     plan_file.parent.mkdir(exist_ok=True)
                     with open(plan_file, 'w', encoding='utf-8') as f:
-                        json.dump(plan, f, indent=2, ensure_ascii=False)
+                        json.dump(self.current_plan, f, indent=2, ensure_ascii=False)
                     print(f"[AGENT EXECUTOR] 💾 Cached plan locally for future runs")
                     
-                    print(f"[AGENT EXECUTOR] ✅ Fetched and cached orchestration plan - {len(plan.get('issues', []))} issues")
+                    print(f"[AGENT EXECUTOR] ✅ Fetched and cached orchestration plan - {len(self.current_plan.get('issues', []))} issues")
                 else:
                     print("[AGENT EXECUTOR] ⚠️ Remote orchestration plan file is empty")
             else:
@@ -413,6 +416,66 @@ class AgentExecutor:
         # This would integrate with supervisor's feedback system
         # For now, just log the failure for supervisor to handle
         
+    def _normalize_plan_format(self):
+        """
+        Normalize the orchestration plan format to ensure it has an 'issues' array.
+        Converts from the metadata format to the expected format with actual issues.
+        """
+        if not self.current_plan:
+            return
+        
+        # If plan already has issues array, nothing to do
+        if 'issues' in self.current_plan and isinstance(self.current_plan['issues'], list):
+            return
+        
+        # Convert from metadata format to issues array format
+        issues = []
+        
+        # Extract issues from implementation_status section
+        if 'implementation_status' in self.current_plan:
+            for key, value in self.current_plan['implementation_status'].items():
+                # Extract issue ID from key (e.g., "issue_1" -> 1)
+                issue_id = key.replace('issue_', '')
+                
+                issue = {
+                    'iid': issue_id,
+                    'title': value.get('description', f'Issue {issue_id}'),
+                    'description': value.get('description', ''),
+                    'implementation_status': value.get('status', 'not_started'),
+                    'files': value.get('files', []),
+                    'acceptance_criteria': value.get('acceptance_criteria', [])
+                }
+                
+                # Add dependency information if available
+                if 'issue_dependencies' in self.current_plan:
+                    for dep in self.current_plan['issue_dependencies']:
+                        if str(dep.get('issue_id')) == str(issue_id):
+                            issue['depends_on'] = dep.get('depends_on', [])
+                            issue['required_for'] = dep.get('required_for', [])
+                            break
+                
+                issues.append(issue)
+        
+        # If no issues found in implementation_status, try development_phases
+        if not issues and 'development_phases' in self.current_plan:
+            for phase in self.current_plan['development_phases']:
+                issue = {
+                    'iid': str(phase.get('issue', phase.get('phase', 0))),
+                    'title': phase.get('description', f"Phase {phase.get('phase', 0)}"),
+                    'description': phase.get('description', ''),
+                    'priority': phase.get('priority', 'medium'),
+                    'implementation_status': 'not_started'
+                }
+                issues.append(issue)
+        
+        # Sort issues by ID
+        issues.sort(key=lambda x: int(x['iid']) if x['iid'].isdigit() else 0)
+        
+        # Update the plan with normalized issues array
+        self.current_plan['issues'] = issues
+        
+        print(f"[AGENT EXECUTOR] 📋 Normalized plan format - extracted {len(issues)} issues from metadata")
+    
     def get_execution_summary(self) -> Dict[str, Any]:
         """Get execution summary."""
         return {

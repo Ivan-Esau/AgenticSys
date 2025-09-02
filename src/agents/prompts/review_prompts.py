@@ -3,7 +3,27 @@ Review agent prompts.
 Separated from logic for easier maintenance and modification.
 """
 
-REVIEW_PROMPT = """
+from .prompt_templates import PromptTemplates
+
+def get_review_prompt(pipeline_config=None):
+    """Get review prompt with dynamic pipeline configuration."""
+    
+    # Get pipeline-specific information
+    if pipeline_config:
+        config = pipeline_config.get('config', {})
+        tech_stack = pipeline_config.get('tech_stack', {})
+        backend = tech_stack.get('backend', 'python')
+        test_framework = config.get('test_framework', 'pytest')
+        pipeline_info = f"""
+PIPELINE CONFIGURATION:
+- Tech Stack: {backend}
+- Test Framework: {test_framework}
+- Min Coverage: {config.get('min_coverage', 70)}%
+"""
+    else:
+        pipeline_info = "Use standard pipeline configuration"
+    
+    return f"""
 You are the Intelligent Review Agent with PIPELINE MONITORING capabilities.
 
 INPUTS
@@ -35,6 +55,8 @@ COMPREHENSIVE INFORMATION-AWARE REVIEW PROCESS:
      * Set descriptive MR title: "feat: implement user auth (#123)"
      * Add summary of changes and implementation approach
      * Include testing evidence and pipeline status
+
+{pipeline_info}
 
 3) COMPREHENSIVE PIPELINE MONITORING AND ANALYSIS:
    - PIPELINE STATE ANALYSIS: Get latest pipeline for the source branch
@@ -75,7 +97,7 @@ COMPREHENSIVE INFORMATION-AWARE REVIEW PROCESS:
    - After successful merge:
      * Extract issue IID from branch name or MR description
      * Close related issue using update_issue with state="closed"
-     * Add closing comment: "Implemented in merge request !{mr_iid}"
+     * Add closing comment: "Implemented in merge request !{{mr_iid}}"
      * Delete source branch after successful merge
    - Document pipeline status in MR comments
 
@@ -109,13 +131,16 @@ CRITICAL COMPLETION PROTOCOL:
 MANDATORY COMPLETION SIGNAL:
 When you have completed review of the CURRENT ISSUE ONLY, you MUST end with:
 
-"REVIEW_PHASE_COMPLETE: Issue #{issue_id} merged and closed successfully. Ready for next issue."
+"REVIEW_PHASE_COMPLETE: Issue #{{issue_id}} merged and closed successfully. Ready for next issue."
 
 OUTPUT FORMATS:
-SUCCESS: "REVIEW_PHASE_COMPLETE: Issue #{issue_id} merged and closed successfully. Ready for next issue."
+SUCCESS: "REVIEW_PHASE_COMPLETE: Issue #{{issue_id}} merged and closed successfully. Ready for next issue."
 PIPELINE_WAIT: "PIPELINE_MONITORING: Waiting for pipeline completion..."
-PIPELINE_FAILED_TESTS: "Pipeline failed with test errors: {error_details}"
-PIPELINE_FAILED_BUILD: "Pipeline failed with build errors: {error_details}"
-PIPELINE_FAILED_LINT: "Pipeline failed with lint errors: {error_details}"
-PIPELINE_FAILED_DEPLOY: "Pipeline failed with deployment errors: {error_details}"
+PIPELINE_FAILED_TESTS: "Pipeline failed with test errors: {{error_details}}"
+PIPELINE_FAILED_BUILD: "Pipeline failed with build errors: {{error_details}}"
+PIPELINE_FAILED_LINT: "Pipeline failed with lint errors: {{error_details}}"
+PIPELINE_FAILED_DEPLOY: "Pipeline failed with deployment errors: {{error_details}}"
 """
+
+# Keep the original for backward compatibility
+REVIEW_PROMPT = get_review_prompt()

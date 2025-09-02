@@ -3,7 +3,13 @@ Planning agent prompts.
 Separated from logic for easier maintenance and modification.
 """
 
-PLANNING_PROMPT = """
+from .prompt_templates import PromptTemplates
+
+def get_planning_prompt(pipeline_config=None):
+    """Get planning prompt with dynamic pipeline configuration."""
+    pipeline_template = PromptTemplates.get_pipeline_template(pipeline_config)
+    
+    return f"""
 You are the Smart Planning Agent with STATE INTELLIGENCE.
 
 INTELLIGENT INFORMATION-AWARE WORKFLOW:
@@ -73,60 +79,7 @@ IF AND ONLY IF no plan exists:
    - For existing files with code: ADD ANALYSIS COMMENTS, don't overwrite
    - For new files: Create with TODO comments
    - Write docs/OVERVIEW.md, docs/PLAN.md and docs/ORCH_PLAN.json with implementation status
-   - CREATE BASIC PIPELINE: Generate .gitlab-ci.yml using simple, working template:
-     
-     BASIC WORKING PIPELINE TEMPLATE (ALWAYS USE THIS):
-     ```yaml
-     # Basic GitLab CI/CD Pipeline - Designed for reliability
-     stages:
-       - test
-       - build
-     
-     variables:
-       PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-     
-     cache:
-       paths:
-         - .cache/pip/
-         - venv/
-     
-     before_script:
-       - python -V
-       - python -m pip install --upgrade pip
-       - pip install virtualenv
-       - virtualenv venv
-       - source venv/bin/activate
-       - pip install pytest
-       - if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-     
-     test_basic:
-       stage: test
-       script:
-         - echo "Running basic Python syntax checks..."
-         - python -m py_compile src/**/*.py || true
-         - echo "Running basic imports test..."
-         - python -c "import sys; sys.path.append('src'); print('Basic import test passed')"
-         - echo "Running pytest if tests exist..."
-         - if [ -d "tests" ]; then python -m pytest tests/ -v --tb=short || echo "Tests failed but continuing"; fi
-       allow_failure: true
-       artifacts:
-         when: always
-         expire_in: 1 week
-     
-     build_check:
-       stage: build
-       script:
-         - echo "Verifying project structure..."
-         - ls -la
-         - echo "Build check completed"
-       artifacts:
-         paths:
-           - src/
-         expire_in: 1 day
-     ```
-     
-     IMPORTANT: Always use the BASIC WORKING PIPELINE template above.
-     - It's designed to be simple and reliable
+   - {pipeline_template}
      - Handles both Python-only and mixed projects
      - Uses allow_failure for resilience
      - Provides comprehensive error logging
@@ -175,3 +128,6 @@ MR: http://gitlab.example.com/project/merge_requests/1
 
 The orchestration plan and CI/CD pipeline are now ready for development.
 """
+
+# Keep the original for backward compatibility
+PLANNING_PROMPT = get_planning_prompt()

@@ -36,85 +36,101 @@ def create_agent(
     )
 
 
-def create_planning_agent(tools: List[Any], project_id: str = None) -> BaseAgent:
+def create_planning_agent(tools: List[Any], project_id: str = None, pipeline_config: dict = None) -> BaseAgent:
     """
     Create a planning agent with standard configuration.
     
     Args:
         tools: Tools available to the agent
         project_id: Project ID for state management
+        pipeline_config: Optional pipeline configuration for dynamic prompts
         
     Returns:
         Configured planning agent
     """
-    from ..prompts.planning_prompts import PLANNING_PROMPT
+    from ..prompts.planning_prompts import get_planning_prompt, PLANNING_PROMPT
+    
+    # Use dynamic prompt if pipeline config provided, otherwise use default
+    prompt = get_planning_prompt(pipeline_config) if pipeline_config else PLANNING_PROMPT
     
     return create_agent(
         name="planning-agent",
-        system_prompt=PLANNING_PROMPT.strip(),
+        system_prompt=prompt.strip(),
         tools=tools,
         project_id=project_id
     )
 
 
-def create_coding_agent(tools: List[Any], project_id: str = None) -> BaseAgent:
+def create_coding_agent(tools: List[Any], project_id: str = None, pipeline_config: dict = None) -> BaseAgent:
     """
     Create a coding agent with standard configuration.
     
     Args:
         tools: Tools available to the agent
         project_id: Project ID for state management
+        pipeline_config: Optional pipeline configuration for dynamic prompts
         
     Returns:
         Configured coding agent
     """
-    from ..prompts.coding_prompts import CODING_PROMPT
+    from ..prompts.coding_prompts import get_coding_prompt, CODING_PROMPT
+    
+    # Use dynamic prompt if pipeline config provided, otherwise use default
+    prompt = get_coding_prompt(pipeline_config) if pipeline_config else CODING_PROMPT
     
     return create_agent(
         name="coding-agent",
-        system_prompt=CODING_PROMPT.strip(),
+        system_prompt=prompt.strip(),
         tools=tools,
         project_id=project_id
     )
 
 
-def create_testing_agent(tools: List[Any], project_id: str = None) -> BaseAgent:
+def create_testing_agent(tools: List[Any], project_id: str = None, pipeline_config: dict = None) -> BaseAgent:
     """
     Create a testing agent with standard configuration.
     
     Args:
         tools: Tools available to the agent
         project_id: Project ID for state management
+        pipeline_config: Optional pipeline configuration for dynamic prompts
         
     Returns:
         Configured testing agent
     """
-    from ..prompts.testing_prompts import TESTING_PROMPT
+    from ..prompts.testing_prompts import get_testing_prompt, TESTING_PROMPT
+    
+    # Use dynamic prompt if pipeline config provided, otherwise use default
+    prompt = get_testing_prompt(pipeline_config) if pipeline_config else TESTING_PROMPT
     
     return create_agent(
         name="testing-agent",
-        system_prompt=TESTING_PROMPT.strip(),
+        system_prompt=prompt.strip(),
         tools=tools,
         project_id=project_id
     )
 
 
-def create_review_agent(tools: List[Any], project_id: str = None) -> BaseAgent:
+def create_review_agent(tools: List[Any], project_id: str = None, pipeline_config: dict = None) -> BaseAgent:
     """
     Create a review agent with standard configuration.
     
     Args:
         tools: Tools available to the agent
         project_id: Project ID for state management
+        pipeline_config: Optional pipeline configuration for dynamic prompts
         
     Returns:
         Configured review agent
     """
-    from ..prompts.review_prompts import REVIEW_PROMPT
+    from ..prompts.review_prompts import get_review_prompt, REVIEW_PROMPT
+    
+    # Use dynamic prompt if pipeline config provided, otherwise use default
+    prompt = get_review_prompt(pipeline_config) if pipeline_config else REVIEW_PROMPT
     
     return create_agent(
         name="review-agent",
-        system_prompt=REVIEW_PROMPT.strip(),
+        system_prompt=prompt.strip(),
         tools=tools,
         project_id=project_id
     )
