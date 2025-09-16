@@ -12,6 +12,4 @@ __all__ = [
     'make_model',
     'ModelConfig',
     'extract_json_block',
-    'truncate_text',
-    'clean_branch_name',
 ]

@@ -74,26 +74,15 @@ IF AND ONLY IF no plan exists:
      * Use efficient descriptions to fit within limits
      * Prioritize issues based on dependencies and complexity
    - STRUCTURE (essential folders + files only)
-3) If apply=true AND no existing plan:
-   - Create 'planning-structure' branch (ONLY if it doesn't exist)
-   - For existing files with code: ADD ANALYSIS COMMENTS, don't overwrite
-   - For new files: Create with TODO comments
-   - Write docs/OVERVIEW.md, docs/PLAN.md and docs/ORCH_PLAN.json with implementation status
-   - {pipeline_template}
-     - Handles both Python-only and mixed projects
-     - Uses allow_failure for resilience
-     - Provides comprehensive error logging
-     - Works with minimal dependencies
-   - Create MR and IMMEDIATELY REQUEST MERGE.
+3) ANALYSIS ONLY (NO FILE CREATION):
+   - Analyze existing GitLab issues and project structure
+   - Provide summary of implementation approach
+   - DO NOT create any files, branches, or merge requests
 
-CRITICAL RULES - NEVER RECREATE, ALWAYS PRESERVE
-- FIRST ACTION: Check if planning was already done (docs/ORCH_PLAN.json exists)
-- If planning exists: STOP and return the existing plan, DO NOT modify anything
-- NEVER overwrite files with actual implementation code
-- NEVER create duplicate planning-structure branches
-- If file has real code: PRESERVE IT COMPLETELY, only add analysis comments
-- If file is empty/placeholder: Create with "// TODO: [implementation plan]"
-- Include implementation_status in plan: "not_started", "partial", "complete"
+CRITICAL RULES - ANALYSIS ONLY
+- DO NOT create any files or branches
+- ONLY analyze existing GitLab issues and provide summary
+- Return simple text analysis, not file creation
 - Example for existing code:
   ```
   // EXISTING: GameLoop class implemented with basic tick functionality
@@ -105,29 +94,24 @@ CRITICAL RULES - NEVER RECREATE, ALWAYS PRESERVE
 - Single multi-file commit ONLY if no plan exists yet.
 
 OUTPUT
-- End with a concise human-readable summary:
-  A) Planning status (new plan created OR existing plan found)
-  B) Branch name and files created (if new plan was created)
-  C) MR URL (if merge request was created)
-  D) Issue count and completion summary
-  
-- IMPORTANT: DO NOT output the full JSON plan in the console
-- The JSON plan should ONLY be written to docs/ORCH_PLAN.json file
-- Console output should be concise and progress-focused
+- End with a concise analysis summary:
+  A) Planning status (analysis completed)
+  B) Issue count and priority assessment
+  C) Implementation approach summary
+
+- IMPORTANT: Only provide text analysis, no file creation
+- Focus on issue prioritization and implementation approach
 
 EXAMPLE OUTPUT:
 ```
-✅ Planning Complete!
+✅ Planning Analysis Complete!
 
-Status: New orchestration plan created
-Branch: planning-structure (merged)
-Files: docs/OVERVIEW.md, docs/PLAN.md, docs/ORCH_PLAN.json, .gitlab-ci.yml
-Pipeline: Basic CI/CD pipeline configured for [python + html-css-js]
-Issues: 20 total (0 complete, 20 pending)
-MR: http://gitlab.example.com/project/merge_requests/1
+Status: Project analysis completed
+Issues: 8 total GitLab issues analyzed
+Priority: Issues 1-3 (core functionality) → Issues 4-6 (features) → Issues 7-8 (UI)
+Tech Stack: Python backend detected
+Approach: Implement issues sequentially based on dependencies
 
-The orchestration plan and CI/CD pipeline are now ready for development.
+Ready for implementation phase.
 """
 
-# Keep the original for backward compatibility
-PLANNING_PROMPT = get_planning_prompt()

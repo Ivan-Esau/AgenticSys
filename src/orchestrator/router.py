@@ -37,6 +37,3 @@ class Router:
             "parameters": kwargs
         }
     
-    def complete_task(self, agent_type: str, success: bool = True):
-        """Mark task as complete (compatibility method)."""
-        pass  # No load tracking needed in streamlined version

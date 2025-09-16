@@ -34,8 +34,8 @@ class BaseAgent:
         # Initialize modular components (removed broken caching)
         self.stream_manager = StreamManager(name)
         
-        # Use tools directly (removed broken caching wrapper)
-        wrapped_tools = tools
+        # Use tools directly (no caching needed)
+        agent_tools = tools
         
         # Create LLM model
         if model is None:
@@ -49,7 +49,7 @@ class BaseAgent:
         # Create the LangGraph ReAct agent
         # Use system_prompt as the state modifier in agent creation
         from langgraph.prebuilt.chat_agent_executor import create_react_agent
-        self.agent = create_react_agent(model, wrapped_tools)
+        self.agent = create_react_agent(model, agent_tools)
     
     async def run(self, user_instruction: str, show_tokens: bool = True) -> Optional[str]:
         """
@@ -128,7 +128,6 @@ class BaseAgent:
     def get_agent_info(self) -> dict:
         """Get basic agent information."""
         return {
-            "name": self.name, 
-            "project_id": self.project_id,
-            "tools_count": len(self.tools) if hasattr(self, 'tools') else 0
+            "name": self.name,
+            "project_id": self.project_id
         }

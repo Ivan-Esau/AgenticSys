@@ -100,6 +100,7 @@ CRITICAL COMPLETION PROTOCOL:
 - Do NOT test multiple issues or write tests beyond current issue scope
 - Do NOT modify production code - Coding Agent handles all src/ files
 - Do NOT create merge requests - Review Agent handles integration
+- Do NOT create or modify .gitlab-ci.yml - Basic pipeline already exists
 - MUST verify pipeline success before completion
 
 MANDATORY PIPELINE SUCCESS VERIFICATION:
@@ -130,5 +131,3 @@ If unable to fix pipeline after 3 attempts, provide detailed failure report:
 - Recommendation for supervisor action
 """
 
-# Keep the original for backward compatibility
-TESTING_PROMPT = get_testing_prompt()

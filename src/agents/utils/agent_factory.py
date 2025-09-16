@@ -48,10 +48,10 @@ def create_planning_agent(tools: List[Any], project_id: str = None, pipeline_con
     Returns:
         Configured planning agent
     """
-    from ..prompts.planning_prompts import get_planning_prompt, PLANNING_PROMPT
-    
-    # Use dynamic prompt if pipeline config provided, otherwise use default
-    prompt = get_planning_prompt(pipeline_config) if pipeline_config else PLANNING_PROMPT
+    from ..prompts.planning_prompts import get_planning_prompt
+
+    # Always use dynamic prompt generation
+    prompt = get_planning_prompt(pipeline_config)
     
     return create_agent(
         name="planning-agent",
@@ -73,10 +73,10 @@ def create_coding_agent(tools: List[Any], project_id: str = None, pipeline_confi
     Returns:
         Configured coding agent
     """
-    from ..prompts.coding_prompts import get_coding_prompt, CODING_PROMPT
-    
-    # Use dynamic prompt if pipeline config provided, otherwise use default
-    prompt = get_coding_prompt(pipeline_config) if pipeline_config else CODING_PROMPT
+    from ..prompts.coding_prompts import get_coding_prompt
+
+    # Always use dynamic prompt generation
+    prompt = get_coding_prompt(pipeline_config)
     
     return create_agent(
         name="coding-agent",
@@ -98,10 +98,10 @@ def create_testing_agent(tools: List[Any], project_id: str = None, pipeline_conf
     Returns:
         Configured testing agent
     """
-    from ..prompts.testing_prompts import get_testing_prompt, TESTING_PROMPT
-    
-    # Use dynamic prompt if pipeline config provided, otherwise use default
-    prompt = get_testing_prompt(pipeline_config) if pipeline_config else TESTING_PROMPT
+    from ..prompts.testing_prompts import get_testing_prompt
+
+    # Always use dynamic prompt generation
+    prompt = get_testing_prompt(pipeline_config)
     
     return create_agent(
         name="testing-agent",
@@ -123,10 +123,10 @@ def create_review_agent(tools: List[Any], project_id: str = None, pipeline_confi
     Returns:
         Configured review agent
     """
-    from ..prompts.review_prompts import get_review_prompt, REVIEW_PROMPT
-    
-    # Use dynamic prompt if pipeline config provided, otherwise use default
-    prompt = get_review_prompt(pipeline_config) if pipeline_config else REVIEW_PROMPT
+    from ..prompts.review_prompts import get_review_prompt
+
+    # Always use dynamic prompt generation
+    prompt = get_review_prompt(pipeline_config)
     
     return create_agent(
         name="review-agent",

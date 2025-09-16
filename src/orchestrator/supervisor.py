@@ -57,7 +57,7 @@ class Supervisor:
         
         # Initialize core components
         self.router = Router()
-        self.executor = AgentExecutor(project_id, None, [])
+        self.executor = AgentExecutor(project_id, [])
         self.performance_tracker = PerformanceTracker()
         self.min_coverage = 70.0  # Minimum test coverage requirement
         self.pipeline_config = None  # Will be initialized after tech stack detection
@@ -143,21 +143,24 @@ class Supervisor:
             print(f"[PROJECT] Using default branch: {self.default_branch}")
     
     async def _initialize_pipeline_config(self):
-        """Initialize pipeline configuration based on project tech stack."""
+        """Initialize pipeline configuration and create basic pipeline if needed."""
         try:
             # Try to detect tech stack from project files
             tech_stack = await self._detect_project_tech_stack()
-            
+
             # Initialize pipeline config
             self.pipeline_config = PipelineConfig(tech_stack)
-            
+
             print(f"[PIPELINE CONFIG] Initialized for {tech_stack.get('backend', 'unknown')} backend")
             if tech_stack.get('frontend') != 'none':
                 print(f"[PIPELINE CONFIG] Frontend: {tech_stack.get('frontend')}")
-            
+
             # Store config in executor for agents to use
             self.executor.pipeline_config = self.pipeline_config
-            
+
+            # Create basic pipeline if it doesn't exist
+            await self._ensure_basic_pipeline_exists()
+
         except Exception as e:
             print(f"[PIPELINE CONFIG] Failed to initialize: {e}")
             # Use default Python config as fallback
@@ -240,7 +243,65 @@ class Supervisor:
             tech_stack = {'backend': 'python', 'frontend': 'none'}
         
         return tech_stack
-    
+
+    async def _ensure_basic_pipeline_exists(self):
+        """Create a basic .gitlab-ci.yml pipeline if it doesn't exist."""
+        try:
+            # Check if pipeline already exists
+            get_file_tool = None
+            for tool in self.tools:
+                if hasattr(tool, 'name') and tool.name == 'get_file_contents':
+                    get_file_tool = tool
+                    break
+
+            if not get_file_tool:
+                print("[PIPELINE] get_file_contents tool not found - cannot check for existing pipeline")
+                return
+
+            # Try to get existing pipeline
+            try:
+                existing_pipeline = await get_file_tool.ainvoke({
+                    "project_id": self.project_id,
+                    "file_path": ".gitlab-ci.yml",
+                    "ref": self.default_branch
+                })
+
+                if existing_pipeline:
+                    print("[PIPELINE] ✅ Basic pipeline already exists - skipping creation")
+                    return
+
+            except Exception:
+                # File doesn't exist, that's fine - we'll create it
+                pass
+
+            # Generate basic pipeline content
+            pipeline_yaml = self.pipeline_config.generate_pipeline_yaml()
+
+            # Create the pipeline file
+            create_file_tool = None
+            for tool in self.tools:
+                if hasattr(tool, 'name') and tool.name == 'create_or_update_file':
+                    create_file_tool = tool
+                    break
+
+            if not create_file_tool:
+                print("[PIPELINE] create_or_update_file tool not found - cannot create pipeline")
+                return
+
+            await create_file_tool.ainvoke({
+                "project_id": self.project_id,
+                "file_path": ".gitlab-ci.yml",
+                "content": pipeline_yaml,
+                "commit_message": f"feat: add basic CI/CD pipeline for {self.pipeline_config.backend}",
+                "branch": self.default_branch
+            })
+
+            print(f"[PIPELINE] ✅ Created basic {self.pipeline_config.backend} pipeline (.gitlab-ci.yml)")
+
+        except Exception as e:
+            print(f"[PIPELINE] ⚠️ Failed to create basic pipeline: {e}")
+            print("[PIPELINE] Project will continue without CI/CD pipeline")
+
     def get_pipeline_instructions(self) -> str:
         """Get dynamic pipeline instructions for agents."""
         if not self.pipeline_config:
@@ -289,8 +350,6 @@ class Supervisor:
             if task_type == "planning":
                 result = await self.executor.execute_planning_agent(**kwargs)
                 if result:
-                    # Get the current plan from executor using modern coordination
-                    self.current_plan = self.executor.get_current_plan()
                     print(f"[SUPERVISOR] ✅ Planning agent handoff complete - plan acquired")
                 else:
                     print(f"[SUPERVISOR] ❌ Planning agent handoff failed")
@@ -457,19 +516,13 @@ class Supervisor:
         
         apply_changes = mode in ["implement", "single"]
         
-        if not self.current_plan:
-            # Need to run planning with retry logic
-            success = await self._execute_planning_with_retry(apply_changes)
-            if not success:
-                print("[ERROR] Planning failed after retries")
-                print("[ERROR] Planning phase failed")
-                self.state = ExecutionState.FAILED
-                return
-        else:
-            print("[CACHED] Using existing plan")
-            # Ensure plan is normalized
-            if self.executor.current_plan:
-                self.current_plan = self.executor.current_plan
+        # Run planning analysis (no plan file needed)
+        success = await self._execute_planning_with_retry(apply_changes)
+        if not success:
+            print("[ERROR] Planning analysis failed after retries")
+            print("[ERROR] Planning phase failed")
+            self.state = ExecutionState.FAILED
+            return
         
         if mode == "analyze":
             print("\n[COMPLETE] Analysis done. Run with --apply to implement.")
@@ -477,24 +530,25 @@ class Supervisor:
             await self._show_summary()
             return
         
-        # Phase 2: Implementation - Use issues from the orchestration plan
+        # Phase 2: Implementation - Fetch issues directly from GitLab
         print("\n" + "="*60)
         print("PHASE 2: IMPLEMENTATION PREPARATION")
         print("="*60)
-        
-        # The planning agent should have created a proper plan with issues
-        # The executor normalizes the plan format, so we should have issues now
-        if self.current_plan and self.current_plan.get("issues"):
-            issues = self.current_plan.get("issues", [])
-            print(f"[ISSUES] Found {len(issues)} issues in orchestration plan")
-            
+
+        # Fetch issues directly from GitLab instead of using local plan
+        print("[ISSUES] Fetching issues directly from GitLab...")
+        issues = await self._fetch_gitlab_issues_via_mcp()
+
+        if issues:
+            print(f"[ISSUES] Found {len(issues)} open issues")
+
             # Show issue details
             for issue in issues[:5]:  # Show first 5
-                status = issue.get('implementation_status', 'pending')
-                print(f"  - Issue #{issue.get('iid')}: {issue.get('title')} [{status}]")
+                issue_id = issue.get('iid') or issue.get('id')
+                title = issue.get('title', 'No title')
+                print(f"  - Issue #{issue_id}: {title}")
         else:
-            print("[ISSUES] No issues found in orchestration plan")
-            print("[DEBUG] Plan keys:", list(self.current_plan.keys()) if self.current_plan else "No plan")
+            print("[ISSUES] No open issues found")
             await self._show_summary()
             return
         
@@ -548,10 +602,12 @@ class Supervisor:
                 
                 if success:
                     self.completed_issues.append(issue)
-                    print(f"[SUCCESS] ✅ Issue #{issue['iid']} completed successfully")
+                    issue_id = issue.get('iid') or issue.get('id') or 'Unknown'
+                    print(f"[SUCCESS] ✅ Issue #{issue_id} completed successfully")
                 else:
                     self.failed_issues.append(issue)
-                    print(f"[WARNING] ❌ Issue #{issue['iid']} failed after {self.max_retries} attempts")
+                    issue_id = issue.get('iid') or issue.get('id') or 'Unknown'
+                    print(f"[WARNING] ❌ Issue #{issue_id} failed after {self.max_retries} attempts")
                 
                 # Save checkpoint after each issue
                 await self._save_checkpoint()

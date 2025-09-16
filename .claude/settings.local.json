@@ -3,7 +3,12 @@
     "allow": [
       "Bash(find:*)",
       "mcp__ide__getDiagnostics",
-      "WebSearch"
+      "WebSearch",
+      "Bash(git log:*)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs",
+      "Bash(cat:*)",
+      "Bash(python -m py_compile:*)"
     ],
     "deny": [],
     "ask": []

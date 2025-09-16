@@ -2,9 +2,9 @@
 Agent prompts - clean separation of prompts from logic
 """
 
-from .planning_prompts import PLANNING_PROMPT
-from .coding_prompts import CODING_PROMPT
-from .testing_prompts import TESTING_PROMPT
-from .review_prompts import REVIEW_PROMPT
+from .planning_prompts import get_planning_prompt
+from .coding_prompts import get_coding_prompt
+from .testing_prompts import get_testing_prompt
+from .review_prompts import get_review_prompt
 
-__all__ = ["PLANNING_PROMPT", "CODING_PROMPT", "TESTING_PROMPT", "REVIEW_PROMPT"]
+__all__ = ["get_planning_prompt", "get_coding_prompt", "get_testing_prompt", "get_review_prompt"]

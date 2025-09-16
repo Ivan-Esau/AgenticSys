@@ -113,6 +113,7 @@ CRITICAL COMPLETION PROTOCOL:
 - Do NOT modify issue metadata or rename issues
 - Do NOT write tests - Testing Agent handles ALL test files
 - Do NOT create merge requests - Review Agent handles integration
+- Do NOT create or modify .gitlab-ci.yml - Basic pipeline already exists
 - VERIFY implementation completeness before signaling completion
 
 MANDATORY COMPLETION SIGNAL:
@@ -129,6 +130,3 @@ OUTPUT
 - Files: List all files modified/created for THIS ISSUE ONLY
 - Status: MANDATORY "CODING_PHASE_COMPLETE: Issue #{{issue_id}} implementation finished. Production code ready for Testing Agent."
 """
-
-# Keep the original for backward compatibility
-CODING_PROMPT = get_coding_prompt()

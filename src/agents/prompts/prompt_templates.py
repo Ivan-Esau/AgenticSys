@@ -29,10 +29,10 @@ class PromptTemplates:
         backend = tech_stack.get('backend', 'python')
         
         template = []
-        template.append(f"CREATE PIPELINE FOR {backend.upper()} PROJECT:")
-        template.append("Generate .gitlab-ci.yml with this configuration:")
+        template.append(f"PIPELINE INFORMATION FOR {backend.upper()} PROJECT:")
+        template.append("(Basic pipeline already exists - DO NOT CREATE OR MODIFY)")
         template.append("")
-        template.append("```yaml")
+        template.append("Expected pipeline structure:")
         template.append(f"# CI/CD Pipeline for {backend} project")
         
         # Docker image
@@ -90,18 +90,20 @@ class PromptTemplates:
     @staticmethod
     def _get_generic_pipeline_template() -> str:
         """Fallback generic pipeline template."""
-        return """CREATE GENERIC PIPELINE:
-Generate .gitlab-ci.yml that:
+        return """PIPELINE INFORMATION:
+Basic pipeline already exists - DO NOT CREATE OR MODIFY .gitlab-ci.yml
+
+Expected pipeline features:
 1. Detects the project's tech stack automatically
 2. Uses appropriate Docker image
 3. Installs necessary dependencies
 4. Runs tests if they exist
 5. Builds the project if applicable
 
-Use environment detection to determine:
-- Programming language (check for requirements.txt, package.json, pom.xml, etc.)
-- Test framework (pytest, jest, junit, etc.)
-- Build tools needed"""
+For reference only:
+- Programming language detection (requirements.txt, package.json, etc.)
+- Test framework integration (pytest, jest, junit, etc.)
+- Build tools configuration"""
     
     @staticmethod
     def get_testing_instructions(pipeline_config: Optional[Dict[str, Any]] = None) -> str:

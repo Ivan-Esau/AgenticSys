@@ -127,6 +127,7 @@ CRITICAL COMPLETION PROTOCOL:
 - Do NOT review multiple issues or handle multiple MRs simultaneously
 - Do NOT modify production code or tests - previous agents handle implementation
 - Your ONLY job: Create MR, monitor pipeline, merge when successful, close issue
+- Do NOT create or modify .gitlab-ci.yml - Basic pipeline already exists
 
 MANDATORY COMPLETION SIGNAL:
 When you have completed review of the CURRENT ISSUE ONLY, you MUST end with:
@@ -142,5 +143,3 @@ PIPELINE_FAILED_LINT: "Pipeline failed with lint errors: {{error_details}}"
 PIPELINE_FAILED_DEPLOY: "Pipeline failed with deployment errors: {{error_details}}"
 """
 
-# Keep the original for backward compatibility
-REVIEW_PROMPT = get_review_prompt()

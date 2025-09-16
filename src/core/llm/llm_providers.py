@@ -35,41 +35,7 @@ class ModelConfigs:
         return {model_id: model_info.get("display_name", model_id) 
                 for model_id, model_info in models.items()}
     
-    @classmethod
-    def get_provider_models_dict(cls) -> dict:
-        """Get models dictionary for all providers (backward compatibility)."""
-        loader = get_model_config_loader()
-        all_models = {}
-        
-        for provider in loader.get_available_providers():
-            models = loader.get_models_for_provider(provider)
-            provider_models = {}
-            for model_id, model_info in models.items():
-                provider_models[model_info.get("display_name", model_id)] = model_info["id"]
-            all_models[f"{provider.upper()}_MODELS"] = provider_models
-        
-        return all_models
     
-    # Backward compatibility properties
-    @property
-    def DEEPSEEK_MODELS(self):
-        return self.get_models_for_provider("deepseek")
-    
-    @property
-    def OPENAI_MODELS(self):
-        return self.get_models_for_provider("openai")
-    
-    @property
-    def CLAUDE_MODELS(self):
-        return self.get_models_for_provider("claude")
-    
-    @property
-    def GROQ_MODELS(self):
-        return self.get_models_for_provider("groq")
-    
-    @property
-    def OLLAMA_MODELS(self):
-        return self.get_models_for_provider("ollama")
 
 
 class LLMProviderConfig:
