@@ -69,8 +69,21 @@ class CompletionMarkers:
         "deploy": "PIPELINE_FAILED_DEPLOY",
         "network": "PIPELINE_FAILED_NETWORK",
         "blocked": "PIPELINE_BLOCKED",
-        "merge_blocked": "MERGE_BLOCKED"
+        "merge_blocked": "MERGE_BLOCKED",
+        "no_tests": "PIPELINE_NO_TESTS_RAN"
     }
+
+    # Indicators that tests never actually ran
+    TEST_FAILURE_INDICATORS = [
+        "maven test failed - check network connectivity",
+        "plugin.*could not be resolved",
+        "failed to read artifact descriptor",
+        "error: no files to upload",
+        "warning:.*no matching files",
+        "build failure",
+        "maven.wagon.*failed",
+        "could not transfer artifact"
+    ]
 
     @classmethod
     def check_completion(cls, agent_type: str, output: str) -> Tuple[bool, float, str]:
@@ -216,3 +229,48 @@ class CompletionMarkers:
             if match:
                 return match.group(1)
         return None
+
+    @classmethod
+    def tests_actually_ran(cls, output: str) -> bool:
+        """Check if tests actually executed based on pipeline output."""
+        if not output:
+            return False
+
+        output_lower = output.lower()
+
+        # Check for indicators that tests didn't run
+        import re
+        for indicator in cls.TEST_FAILURE_INDICATORS:
+            if re.search(indicator.lower(), output_lower):
+                return False
+
+        # Positive indicators that tests ran
+        positive_indicators = [
+            "test summary",
+            "coverage report generated",
+            "test reports generated",
+            "tests run:",
+            "jacoco.*report",
+            "surefire.*reports",
+            r"\d+\s+tests?\s+(passed|run|executed)"
+        ]
+
+        for indicator in positive_indicators:
+            if re.search(indicator, output_lower):
+                return True
+
+        return False
+
+    @classmethod
+    def get_pipeline_summary(cls, output: str) -> dict:
+        """Extract pipeline execution summary from output."""
+        summary = {
+            "tests_ran": cls.tests_actually_ran(output),
+            "coverage_generated": "coverage report generated" in output.lower(),
+            "test_reports_generated": "test reports generated" in output.lower(),
+            "artifacts_uploaded": "error: no files to upload" not in output.lower(),
+            "dependency_issues": any(indicator in output.lower() for indicator in [
+                "could not be resolved", "failed to read artifact", "build failure"
+            ])
+        }
+        return summary

@@ -118,10 +118,14 @@ class PipelineConfig:
                     'mvn --version'
                 ],
                 'test_commands': [
-                    'mvn clean test jacoco:report -Dmaven.wagon.http.retryHandler.count=5 -Dmaven.wagon.httpconnectionManager.ttlSeconds=120 || echo "Maven test failed - check network connectivity"'
+                    'mvn clean test jacoco:report -Dmaven.wagon.http.retryHandler.count=5 -Dmaven.wagon.httpconnectionManager.ttlSeconds=120 -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true',
+                    'echo "=== TEST SUMMARY ===" && find target -name "*.xml" -o -name "*.html" | head -10',
+                    'if [ -f target/site/jacoco/index.html ]; then echo "✅ Coverage report generated"; else echo "❌ Coverage report missing" && exit 1; fi',
+                    'if [ -d target/surefire-reports ]; then echo "✅ Test reports generated"; else echo "❌ Test reports missing" && exit 1; fi'
                 ],
                 'build_commands': [
-                    'mvn clean compile -Dmaven.wagon.http.retryHandler.count=5 -Dmaven.wagon.httpconnectionManager.ttlSeconds=120 || echo "Maven build failed - check network connectivity"'
+                    'mvn clean compile -Dmaven.wagon.http.retryHandler.count=5 -Dmaven.wagon.httpconnectionManager.ttlSeconds=120 -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true',
+                    'echo "=== BUILD SUMMARY ===" && find target -name "*.class" | wc -l && echo "classes compiled"'
                 ]
             })
         
@@ -224,22 +228,27 @@ class PipelineConfig:
         # Add DNS fix for shell executors
         if self.backend == 'java':
             yaml_lines.extend([
-                "  - echo 'Checking network connectivity...'",
-                "  - ping -c 1 8.8.8.8 || echo 'Network might be restricted'",
+                "  - echo 'Configuring Maven settings for dependency resolution...'",
                 "  - mkdir -p ~/.m2",
-                "  - echo '<?xml version=\"1.0\" encoding=\"UTF-8\"?>' > ~/.m2/settings.xml",
-                "  - echo '<settings>' >> ~/.m2/settings.xml",
+                "  - echo '<settings xmlns=\"http://maven.apache.org/SETTINGS/1.0.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd\">' > ~/.m2/settings.xml",
                 "  - echo '  <mirrors>' >> ~/.m2/settings.xml",
-                "  - echo '    <mirror><id>aliyun</id><url>https://maven.aliyun.com/repository/central</url><mirrorOf>central</mirrorOf></mirror>' >> ~/.m2/settings.xml",
-                "  - echo '    <mirror><id>backup</id><url>https://repo1.maven.org/maven2</url><mirrorOf>!aliyun</mirrorOf></mirror>' >> ~/.m2/settings.xml",
+                "  - echo '    <mirror><id>maven-central</id><url>https://repo1.maven.org/maven2</url><mirrorOf>central</mirrorOf></mirror>' >> ~/.m2/settings.xml",
                 "  - echo '  </mirrors>' >> ~/.m2/settings.xml",
                 "  - echo '  <profiles>' >> ~/.m2/settings.xml",
-                "  - echo '    <profile><id>default</id><activation><activeByDefault>true</activeByDefault></activation>' >> ~/.m2/settings.xml",
-                "  - echo '      <properties><maven.wagon.http.retryHandler.count>5</maven.wagon.http.retryHandler.count></properties>' >> ~/.m2/settings.xml",
+                "  - echo '    <profile>' >> ~/.m2/settings.xml",
+                "  - echo '      <id>default</id>' >> ~/.m2/settings.xml",
+                "  - echo '      <activation><activeByDefault>true</activeByDefault></activation>' >> ~/.m2/settings.xml",
+                "  - echo '      <properties>' >> ~/.m2/settings.xml",
+                "  - echo '        <maven.wagon.http.retryHandler.count>5</maven.wagon.http.retryHandler.count>' >> ~/.m2/settings.xml",
+                "  - echo '        <maven.wagon.httpconnectionManager.ttlSeconds>120</maven.wagon.httpconnectionManager.ttlSeconds>' >> ~/.m2/settings.xml",
+                "  - echo '        <maven.wagon.http.ssl.insecure>true</maven.wagon.http.ssl.insecure>' >> ~/.m2/settings.xml",
+                "  - echo '        <maven.wagon.http.ssl.allowall>true</maven.wagon.http.ssl.allowall>' >> ~/.m2/settings.xml",
+                "  - echo '      </properties>' >> ~/.m2/settings.xml",
                 "  - echo '    </profile>' >> ~/.m2/settings.xml",
                 "  - echo '  </profiles>' >> ~/.m2/settings.xml",
-                "  - echo '</settings>' >> ~/.m2/settings.xml"
-                "  - echo 'Maven settings configured'"
+                "  - echo '</settings>' >> ~/.m2/settings.xml",
+                "  - echo 'Maven settings configured for dependency resolution'",
+                "  - mvn help:effective-settings -q | head -20 || echo 'Settings validation failed'"
             ])
 
         # Add original before_script commands

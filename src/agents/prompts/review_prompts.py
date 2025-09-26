@@ -95,6 +95,14 @@ COMPREHENSIVE INFORMATION-AWARE REVIEW PROCESS:
      * ALL required jobs show "success" status
      * No failed or canceled jobs in the pipeline
      * Pipeline completed within reasonable time (< 10 minutes)
+   - ARTIFACT VALIDATION: Verify test outputs and coverage reports exist:
+     * Check job traces for "TEST SUMMARY" and "BUILD SUMMARY" sections
+     * Look for "✅ Coverage report generated" and "✅ Test reports generated" messages
+     * Verify artifact upload success (no "ERROR: No files to upload" messages)
+     * For Java projects: Confirm JaCoCo reports and Surefire test results exist
+     * Validate no "Maven test failed" or dependency resolution errors occurred
+     * CRITICAL: If traces show fallback messages like "Maven test failed - check network connectivity",
+       this indicates tests NEVER RAN and pipeline should be marked as FAILED
 
 4) INTELLIGENT FAILURE ROUTING AND RECOVERY:
    - ERROR ANALYSIS: Parse pipeline job logs to extract specific error messages
