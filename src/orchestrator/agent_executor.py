@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 from src.core.llm.utils import extract_json_block
+from .completion_markers import CompletionMarkers
 from ..agents import (
     planning_agent,
     coding_agent,
@@ -40,60 +41,31 @@ class AgentExecutor:
     
     def _check_agent_success(self, agent_type: str, result: str) -> tuple[bool, float]:
         """
-        Simple success detection for agent outputs.
+        Check agent success using centralized completion markers.
         Returns (success, confidence) tuple.
         """
-        if not result:
+        # First check for pipeline failures (critical for review agent)
+        if CompletionMarkers.has_pipeline_failure(result):
+            failure_type = CompletionMarkers.get_pipeline_failure_type(result)
+            print(f"[AGENT EXECUTOR] ❌ Pipeline failure detected: {failure_type}")
+
+            # Check if this is a network failure that should be retried
+            if CompletionMarkers.should_retry_pipeline(result):
+                print(f"[AGENT EXECUTOR] 🔄 Network failure - pipeline retry recommended")
+
+            # Pipeline failure means task failed
             return False, 0.0
-        
-        # Define success markers for each agent type
-        success_markers = {
-            "planning": [
-                "planning status: complete",
-                "planning complete",
-                "orchestration plan",
-                "plan created",
-                "planning is complete",
-                "existing orchestration plan found"
-            ],
-            "coding": [
-                "CODING_PHASE_COMPLETE",
-                "implementation complete",
-                "code complete",
-                "files created",
-                "implementation successful"
-            ],
-            "testing": [
-                "TESTING_PHASE_COMPLETE",
-                "tests complete",
-                "tests pass",
-                "all tests passing",
-                "testing successful"
-            ],
-            "review": [
-                "REVIEW_PHASE_COMPLETE",
-                "review complete",
-                "merge request created",
-                "ready to merge",
-                "review successful"
-            ]
-        }
-        
-        # Get markers for this agent type
-        markers = success_markers.get(agent_type, [])
-        if not markers:
-            return False, 0.0
-        
-        # Check for success markers (case-insensitive)
-        result_lower = result.lower()
-        matches = sum(1 for marker in markers if marker.lower() in result_lower)
-        
-        if matches > 0:
-            # Calculate confidence based on number of matches
-            confidence = min(1.0, matches * 0.3)
-            return True, confidence
-        
-        return False, 0.0
+
+        # Check for completion markers
+        success, confidence, reason = CompletionMarkers.check_completion(agent_type, result)
+
+        # Log the detection reason for debugging
+        if success:
+            print(f"[AGENT EXECUTOR] ✅ Success detected: {reason}")
+        elif confidence > 0:
+            print(f"[AGENT EXECUTOR] ⚠️ Partial match: {reason}")
+
+        return success, confidence
     
     async def execute_planning_agent(
         self,
@@ -115,7 +87,8 @@ class AgentExecutor:
                     project_id=self.project_id,
                     tools=self.tools,
                     apply=apply,
-                    show_tokens=show_tokens
+                    show_tokens=show_tokens,
+                    pipeline_config=self.pipeline_config.config if self.pipeline_config else None
                 ),
                 timeout=600  # 10 minute timeout
             )
@@ -146,6 +119,11 @@ class AgentExecutor:
         except Exception as e:
             print(f"[AGENT EXECUTOR] ❌ Planning agent failed: {e}")
             print(f"[AGENT EXECUTOR] 🔍 Error type: {type(e).__name__}")
+            # Add more debug info for troubleshooting
+            import traceback
+            if "tool decorator" in str(e):
+                print("[AGENT EXECUTOR] 🔧 Tool compatibility issue detected")
+                print("[AGENT EXECUTOR] 📝 This may be due to MCP tool format incompatibility")
             self._end_execution_tracking(execution_id, "error", str(e))
             return False
     
@@ -170,7 +148,8 @@ class AgentExecutor:
                 tools=self.tools,
                 work_branch=branch,
                 plan_json=self.current_plan,
-                show_tokens=show_tokens
+                show_tokens=show_tokens,
+                pipeline_config=self.pipeline_config.config if self.pipeline_config else None
             )
             
             # Check for success
@@ -204,7 +183,8 @@ class AgentExecutor:
                 tools=self.tools,
                 work_branch=branch,
                 plan_json=self.current_plan,
-                show_tokens=show_tokens
+                show_tokens=show_tokens,
+                pipeline_config=self.pipeline_config.config if self.pipeline_config else None
             )
             
             # Check for success
@@ -238,12 +218,43 @@ class AgentExecutor:
                 tools=self.tools,
                 work_branch=branch,
                 plan_json=self.current_plan,
-                show_tokens=show_tokens
+                show_tokens=show_tokens,
+                pipeline_config=self.pipeline_config.config if self.pipeline_config else None
             )
             
-            # Check for success
+            # Check for success - CRITICAL: Must verify pipeline passed
             success, confidence = self._check_agent_success("review", result or "")
-            
+
+            # Additional validation for review agent - must not have pipeline failures
+            if success and "REVIEW_PHASE_COMPLETE" in (result or ""):
+                # Check for merge completion
+                if "merged and closed successfully" in result:
+                    # Look for any pipeline status indicators (more flexible)
+                    pipeline_indicators = [
+                        "pipeline.*success", "pipeline.*passed", "pipeline.*completed",
+                        "✅.*success", "test job.*success", "build job.*success",
+                        "pipeline status.*success", "both.*jobs.*passed"
+                    ]
+
+                    import re
+                    has_pipeline_confirmation = any(
+                        re.search(pattern, result.lower()) for pattern in pipeline_indicators
+                    )
+
+                    if has_pipeline_confirmation:
+                        print(f"[AGENT EXECUTOR] ✅ Review agent confirmed pipeline success and merge completion")
+                    else:
+                        # Check if this is likely a legitimate completion by looking for detailed pipeline info
+                        if any(phrase in result.lower() for phrase in ["test job", "build job", "pipeline", "jobs.*passed"]):
+                            print(f"[AGENT EXECUTOR] ✅ Review agent provided pipeline details - accepting completion")
+                        else:
+                            print(f"[AGENT EXECUTOR] ⚠️ WARNING: Review claimed success but no pipeline details found")
+                            print(f"[AGENT EXECUTOR] ❌ Blocking merge - pipeline verification missing")
+                            success = False
+                else:
+                    print(f"[AGENT EXECUTOR] ⚠️ WARNING: Review claimed completion but no merge confirmation")
+                    success = False
+
             self._end_execution_tracking(execution_id, "success" if success else "failed")
             return success
             
@@ -272,8 +283,13 @@ class AgentExecutor:
         
         # Planning agent completed successfully
         if success:
-            print("[AGENT EXECUTOR] ✅ Planning analysis completed - no orchestration plan needed")
-            
+            print("[AGENT EXECUTOR] ✅ Planning analysis completed")
+
+            # Store the planning analysis result for supervisor use
+            if result and not self.current_plan:
+                self.current_plan = result  # Store the full planning analysis text
+                print("[AGENT EXECUTOR] 📋 Stored planning analysis for issue prioritization")
+
             print("[AGENT EXECUTOR] ✅ Planning agent execution successful")
             return True
         

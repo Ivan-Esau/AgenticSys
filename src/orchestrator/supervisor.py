@@ -37,34 +37,33 @@ class Supervisor:
     Properly manages agent dependencies and instruction flow.
     """
     
-    def __init__(self, project_id: str):
+    def __init__(self, project_id: str, tech_stack: dict = None):
         self.project_id = project_id
         self.tools = None
         self.client = None
         self.default_branch = "master"
         self.current_plan = None
         self.state = ExecutionState.INITIALIZING
-        
+        self.provided_tech_stack = tech_stack  # Store user-provided tech stack
+
         # Issue tracking
         self.gitlab_issues = []
         self.implementation_queue = []
         self.completed_issues = []
         self.failed_issues = []
-        
+
         # Retry configuration
         self.max_retries = 3
         self.retry_delay = 5
-        
+
         # Initialize core components
         self.router = Router()
         self.executor = AgentExecutor(project_id, [])
         self.performance_tracker = PerformanceTracker()
         self.min_coverage = 70.0  # Minimum test coverage requirement
         self.pipeline_config = None  # Will be initialized after tech stack detection
-        
-        # Checkpoint directory
-        self.checkpoint_dir = Path(".checkpoints")
-        self.checkpoint_dir.mkdir(exist_ok=True)
+
+        # Checkpoint system removed - was incomplete
     
     def _validate_issue(self, issue: Dict) -> bool:
         """Simple issue validation - replaces entire validation module."""
@@ -145,8 +144,12 @@ class Supervisor:
     async def _initialize_pipeline_config(self):
         """Initialize pipeline configuration and create basic pipeline if needed."""
         try:
-            # Try to detect tech stack from project files
-            tech_stack = await self._detect_project_tech_stack()
+            # Use provided tech stack if available, otherwise detect from project files
+            if self.provided_tech_stack:
+                tech_stack = self.provided_tech_stack
+                print(f"[PIPELINE CONFIG] Using provided tech stack: {tech_stack}")
+            else:
+                tech_stack = await self._detect_project_tech_stack()
 
             # Initialize pipeline config
             self.pipeline_config = PipelineConfig(tech_stack)
@@ -401,86 +404,92 @@ class Supervisor:
             print(f"[SUPERVISOR] ❌ Agent coordination failed: {e}")
             raise Exception(f"Task {task_type} failed: {e}")
     
-    async def implement_issue(self, issue: Dict) -> bool:
+    async def implement_issue(self, issue: Dict, max_retries: int = None) -> bool:
         """
-        Implement a single issue using the modular issue manager.
+        Implement a single issue with optional retry logic.
         """
         issue_id = issue.get("iid")
         issue_title = issue.get("title", "Unknown")
-        
+        retries = max_retries if max_retries is not None else self.max_retries
+
         # Validate issue structure
         if not self._validate_issue(issue):
             print(f"[ERROR] Invalid issue structure for #{issue_id}")
             return False
-        
-        print(f"\n[ISSUE #{issue_id}] Starting: {issue_title}")
-        
-        # Log issue implementation start
-        print(f"[ISSUE #{issue_id}] Implementation starting")
-        
-        # Implement issue through agent pipeline
-        try:
-            # Phase 1: Coding with pipeline config
-            print(f"[ISSUE #{issue_id}] Phase 1/3: Coding...")
-            coding_result = await self.route_task(
+
+        # Retry loop
+        for attempt in range(retries):
+            if attempt > 0:
+                print(f"[RETRY] Issue #{issue_id} attempt {attempt + 1}/{retries}")
+                await asyncio.sleep(self.retry_delay * attempt)
+
+            print(f"\n[ISSUE #{issue_id}] Starting: {issue_title}")
+            print(f"[ISSUE #{issue_id}] Implementation starting")
+
+            # Implement issue through agent pipeline
+            try:
+                # Create feature branch name for this issue
+                import re
+                issue_title = issue.get('title', '')
+                # Clean the title: remove special chars, replace spaces with hyphens
+                issue_slug = re.sub(r'[^a-zA-Z0-9\s-]', '', issue_title).lower()
+                issue_slug = re.sub(r'\s+', '-', issue_slug).strip('-')[:30]
+                feature_branch = f"feature/issue-{issue_id}-{issue_slug}"
+
+                # Phase 1: Coding with pipeline config
+                print(f"[ISSUE #{issue_id}] Phase 1/3: Coding...")
+                print(f"[ISSUE #{issue_id}] Working on branch: {feature_branch}")
+                coding_result = await self.route_task(
                 "coding",
                 issue=issue,
-                branch=self.default_branch
-            )
-            
-            if not coding_result:
-                print(f"[ISSUE #{issue_id}] ❌ Coding phase failed")
-                return False
-            
-            # Phase 2: Testing with quality validation
-            print(f"[ISSUE #{issue_id}] Phase 2/3: Testing...")
-            
-            # Log testing phase
-            print(f"[ISSUE #{issue_id}] Running tests with minimum {self.min_coverage}% coverage requirement")
-            
-            testing_result = await self.route_task(
+                branch=feature_branch
+                )
+
+                if not coding_result:
+                    print(f"[ISSUE #{issue_id}] ❌ Coding phase failed")
+                    continue  # Retry the whole issue
+
+                # Phase 2: Testing with quality validation
+                print(f"[ISSUE #{issue_id}] Phase 2/3: Testing...")
+
+                # Log testing phase
+                print(f"[ISSUE #{issue_id}] Running tests with minimum {self.min_coverage}% coverage requirement")
+
+                testing_result = await self.route_task(
                 "testing",
                 issue=issue,
-                branch=self.default_branch
-            )
-            
-            if not testing_result:
-                print(f"[ISSUE #{issue_id}] ⚠️ Testing phase failed")
-                # Check pipeline for debugging info
-                await self._analyze_and_fix_pipeline_failures(issue_id)
-            
-            # Phase 3: Review & Merge Request with quality check
-            print(f"[ISSUE #{issue_id}] Phase 3/3: Review & MR...")
-            
-            # Check pipeline status before review
-            await self._check_pipeline_status(issue_id)
-            
-            review_result = await self.route_task(
+                branch=feature_branch  # Use the same feature branch
+                )
+
+                if not testing_result:
+                    print(f"[ISSUE #{issue_id}] ⚠️ Testing phase failed")
+                    # Check pipeline for debugging info
+                    await self._analyze_and_fix_pipeline_failures(issue_id)
+
+                # Phase 3: Review & Merge Request with quality check
+                print(f"[ISSUE #{issue_id}] Phase 3/3: Review & MR...")
+
+                # Check pipeline status before review
+                await self._check_pipeline_status(issue_id)
+
+                review_result = await self.route_task(
                 "review",
                 issue=issue,
-                branch=self.default_branch
-            )
-            
-            result = review_result
-            
-            if result:
-                print(f"[ISSUE #{issue_id}] ✅ Successfully implemented")
-                # Update orchestration plan
-                await self._update_orchestration_plan_for_completed_issue(str(issue_id))
-                
-        except Exception as e:
-            print(f"[ISSUE #{issue_id}] ❌ Implementation failed: {e}")
-            result = False
-        
-        # Record final status
-        final_status = "complete" if result else "failed"
-        # Issue processing completed: {final_status}
-        
-        # Update orchestration plan if issue was completed successfully
-        if result:
-            await self._update_orchestration_plan_for_completed_issue(issue_id)
-        
-        return result
+                branch=feature_branch  # Use the same feature branch
+                )
+
+                if review_result:
+                    print(f"[ISSUE #{issue_id}] ✅ Successfully implemented")
+                    await self._update_orchestration_plan_for_completed_issue(issue)
+                    return True  # Success!
+
+            except Exception as e:
+                print(f"[ISSUE #{issue_id}] ❌ Implementation failed: {e}")
+                if attempt < retries - 1:
+                    continue  # Retry
+                return False  # Final failure
+        # If we get here, all retries failed
+        return False
     
     async def execute(self, mode: str = "implement", specific_issue: str = None, resume: bool = False):
         """
@@ -494,9 +503,9 @@ class Supervisor:
         print(f"Mode: {mode}")
         print(f"State: {self.state.value}")
         
-        # Load checkpoint if resuming
+        # Resume functionality removed - was incomplete
         if resume:
-            await self._load_checkpoint()
+            print("[WARNING] Resume functionality is not currently implemented")
         
         # Initialize with validation
         try:
@@ -523,6 +532,11 @@ class Supervisor:
             print("[ERROR] Planning phase failed")
             self.state = ExecutionState.FAILED
             return
+
+        # Store the planning result for later use
+        if hasattr(self.executor, 'current_plan') and self.executor.current_plan:
+            self.current_plan = self.executor.current_plan
+            print("[PLANNING] Stored planning result for issue prioritization")
         
         if mode == "analyze":
             print("\n[COMPLETE] Analysis done. Run with --apply to implement.")
@@ -530,25 +544,34 @@ class Supervisor:
             await self._show_summary()
             return
         
-        # Phase 2: Implementation - Fetch issues directly from GitLab
+        # Phase 2: Implementation - Use planning agent's prioritization
         print("\n" + "="*60)
         print("PHASE 2: IMPLEMENTATION PREPARATION")
         print("="*60)
 
-        # Fetch issues directly from GitLab instead of using local plan
-        print("[ISSUES] Fetching issues directly from GitLab...")
-        issues = await self._fetch_gitlab_issues_via_mcp()
+        # Fetch issues from GitLab and apply planning prioritization
+        print("[ISSUES] Fetching issues from GitLab...")
+        all_gitlab_issues = await self._fetch_gitlab_issues_via_mcp()
+
+        if not all_gitlab_issues:
+            print("[ISSUES] No open issues found")
+            await self._show_summary()
+            return
+
+        print(f"[ISSUES] Found {len(all_gitlab_issues)} open issues from GitLab")
+
+        # Apply planning agent's prioritization and filter completed issues
+        issues = await self._apply_planning_prioritization(all_gitlab_issues)
 
         if issues:
-            print(f"[ISSUES] Found {len(issues)} open issues")
-
-            # Show issue details
+            print(f"[ISSUES] After planning prioritization and filtering: {len(issues)} issues to implement")
+            # Show issue details in priority order
             for issue in issues[:5]:  # Show first 5
                 issue_id = issue.get('iid') or issue.get('id')
                 title = issue.get('title', 'No title')
                 print(f"  - Issue #{issue_id}: {title}")
         else:
-            print("[ISSUES] No open issues found")
+            print("[ISSUES] No issues need implementation (all completed or merged)")
             await self._show_summary()
             return
         
@@ -561,20 +584,16 @@ class Supervisor:
             if specific_issue:
                 # Single issue mode
                 issues_to_implement = [
-                    i for i in issues 
+                    i for i in issues
                     if str(i.get("iid")) == str(specific_issue)
                 ]
                 if not issues_to_implement:
-                    print(f"[ERROR] Issue {specific_issue} not found")
+                    print(f"[ERROR] Issue {specific_issue} not found or already completed")
                     return
             else:
-                # All issues mode - filter out already completed
-                issues_to_implement = []
-                for issue in issues:
-                    status = issue.get("implementation_status", "pending")
-                    if status != "complete" and status != "completed":
-                        issues_to_implement.append(issue)
-                
+                # All issues mode - issues already filtered by planning prioritization
+                issues_to_implement = issues
+
                 if not issues_to_implement:
                     print("[INFO] All issues are already completed")
                     await self._show_summary()
@@ -591,14 +610,14 @@ class Supervisor:
                 issue_id = issue.get('iid')
                 
                 # Skip if already completed in previous run
-                if any(c.get('iid') == issue_id for c in self.completed_issues):
+                if any((c.get('iid') if isinstance(c, dict) else c) == issue_id for c in self.completed_issues):
                     print(f"\n[SKIP] Issue #{issue_id} already completed in previous run")
                     continue
                 
                 print(f"\n[PROGRESS] {idx}/{len(issues_to_implement)}")
                 
                 # Use retry logic for resilience
-                success = await self._implement_issue_with_retry(issue)
+                success = await self.implement_issue(issue)  # Now has retry built-in
                 
                 if success:
                     self.completed_issues.append(issue)
@@ -609,8 +628,7 @@ class Supervisor:
                     issue_id = issue.get('iid') or issue.get('id') or 'Unknown'
                     print(f"[WARNING] ❌ Issue #{issue_id} failed after {self.max_retries} attempts")
                 
-                # Save checkpoint after each issue
-                await self._save_checkpoint()
+                # Checkpoint removed
                 
                 # Brief pause between issues
                 if idx < len(issues_to_implement):
@@ -620,8 +638,7 @@ class Supervisor:
         # Phase 3: Final state and summary
         self.state = ExecutionState.COMPLETING
         
-        # Final checkpoint save
-        await self._save_checkpoint()
+        # Execution complete
         
         # Show comprehensive summary
         await self._show_summary()
@@ -687,11 +704,8 @@ class Supervisor:
         
         # Show final state
         print(f"\n[FINAL STATE] {self.state.value}")
-        
-        # Checkpoint info
-        checkpoint_file = self.checkpoint_dir / f"supervisor_{self.project_id}.json"
-        if checkpoint_file.exists():
-            print(f"[CHECKPOINT] State saved - can resume with --resume flag")
+
+        # Summary complete
     
     async def _attempt_recovery(self, task_type: str, error: Exception, **kwargs) -> Optional[Any]:
         """
@@ -719,7 +733,226 @@ class Supervisor:
             print(f"[RECOVERY] Recovery failed: {recovery_error}")
             
         return None
-    
+
+    async def _apply_planning_prioritization(self, all_issues: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Apply planning agent's prioritization and filter out completed issues.
+        """
+        print("[PLANNING] Applying planning agent's prioritization...")
+
+        # Extract prioritized issue order from planning agent's analysis
+        prioritized_issues = []
+
+        # Get the planning agent's current plan/analysis
+        planning_result = getattr(self.executor, 'current_plan', None)
+
+        # Also check if we have our own plan stored
+        if not planning_result and hasattr(self, 'current_plan'):
+            planning_result = self.current_plan
+
+        if planning_result:
+            print("[PLANNING] Using planning agent's analysis for prioritization")
+            # Extract issue order from planning text (if available)
+            prioritized_issues = self._extract_issue_priority_from_plan(planning_result, all_issues)
+
+        if not prioritized_issues:
+            print("[PLANNING] No specific prioritization found, using dependency-based ordering")
+            # Fallback: Use dependency-based prioritization
+            prioritized_issues = self._apply_dependency_based_prioritization(all_issues)
+
+        # Filter out completed/merged issues
+        filtered_issues = []
+        for issue in prioritized_issues:
+            if await self._is_issue_completed(issue):
+                issue_id = issue.get('iid') or issue.get('id')
+                print(f"[SKIP] Issue #{issue_id} already completed/merged")
+                continue
+            filtered_issues.append(issue)
+
+        return filtered_issues
+
+    def _extract_issue_priority_from_plan(self, plan_data: Any, all_issues: List[Dict]) -> List[Dict]:
+        """
+        Extract issue priority order from planning agent's analysis.
+        """
+        if isinstance(plan_data, str):
+            # Parse text-based plan for issue priorities
+            return self._parse_text_plan_priorities(plan_data, all_issues)
+        elif isinstance(plan_data, dict) and 'issues' in plan_data:
+            # Use structured plan format
+            return self._parse_structured_plan_priorities(plan_data, all_issues)
+        else:
+            return []
+
+    def _parse_text_plan_priorities(self, plan_text: str, all_issues: List[Dict]) -> List[Dict]:
+        """
+        Parse text-based planning output for issue priorities.
+        """
+        prioritized = []
+        issue_map = {str(issue.get('iid')): issue for issue in all_issues}
+
+        # Look for priority patterns in the planning text
+        import re
+
+        # Pattern 1: "Phase 1: Issues #1, #5"
+        phase_pattern = r'Phase \d+.*?Issue[s]?\s*[#:]?\s*([#\d,\s]+)'
+        phases = re.findall(phase_pattern, plan_text, re.IGNORECASE)
+
+        for phase in phases:
+            # Extract issue numbers from each phase
+            issue_numbers = re.findall(r'#?(\d+)', phase)
+            for num in issue_numbers:
+                if num in issue_map and issue_map[num] not in prioritized:
+                    prioritized.append(issue_map[num])
+
+        # Pattern 2: "Issue #X" mentions in order
+        if not prioritized:
+            issue_mentions = re.findall(r'Issue #(\d+)', plan_text)
+            for num in issue_mentions:
+                if num in issue_map and issue_map[num] not in prioritized:
+                    prioritized.append(issue_map[num])
+
+        # Add any remaining issues not mentioned in the plan
+        for issue in all_issues:
+            if issue not in prioritized:
+                prioritized.append(issue)
+
+        return prioritized
+
+    def _parse_structured_plan_priorities(self, plan_data: Dict, all_issues: List[Dict]) -> List[Dict]:
+        """
+        Parse structured plan format for issue priorities.
+        """
+        prioritized = []
+        issue_map = {str(issue.get('iid')): issue for issue in all_issues}
+
+        if 'issues' in plan_data:
+            for planned_issue in plan_data['issues']:
+                issue_id = str(planned_issue.get('id') or planned_issue.get('iid', ''))
+                if issue_id in issue_map:
+                    prioritized.append(issue_map[issue_id])
+
+        # Add any remaining issues
+        for issue in all_issues:
+            if issue not in prioritized:
+                prioritized.append(issue)
+
+        return prioritized
+
+    def _apply_dependency_based_prioritization(self, all_issues: List[Dict]) -> List[Dict]:
+        """
+        Apply dependency-based prioritization as fallback.
+        Based on common patterns: foundation issues first, then dependent features.
+        """
+        foundation_keywords = ['project', 'user', 'login', 'setup', 'database', 'model']
+        feature_keywords = ['task', 'display', 'overview', 'form', 'list']
+        ui_keywords = ['color', 'style', 'display', 'interface', 'gui']
+
+        foundation_issues = []
+        feature_issues = []
+        ui_issues = []
+        other_issues = []
+
+        for issue in all_issues:
+            title = issue.get('title', '').lower()
+            description = issue.get('description', '').lower()
+            text = f"{title} {description}"
+
+            if any(keyword in text for keyword in foundation_keywords):
+                foundation_issues.append(issue)
+            elif any(keyword in text for keyword in ui_keywords):
+                ui_issues.append(issue)
+            elif any(keyword in text for keyword in feature_keywords):
+                feature_issues.append(issue)
+            else:
+                other_issues.append(issue)
+
+        # Return in dependency order: foundation → features → UI → others
+        return foundation_issues + feature_issues + other_issues + ui_issues
+
+    async def _is_issue_completed(self, issue: Dict[str, Any]) -> bool:
+        """
+        Check if an issue has already been completed/merged.
+        Enhanced with better completion detection to avoid retry loops.
+        """
+        issue_id = issue.get('iid') or issue.get('id')
+        if not issue_id:
+            return False
+
+        try:
+            # Check if issue is closed
+            if issue.get('state') == 'closed':
+                print(f"[CHECK] Issue #{issue_id} is closed - marking as completed")
+                return True
+
+            # Check if there's already a merged branch for this issue
+            branch_pattern = f"feature/issue-{issue_id}-"
+
+            # Get list of branches
+            list_branches_tool = None
+            for tool in self.tools:
+                if hasattr(tool, 'name') and tool.name == 'list_branches':
+                    list_branches_tool = tool
+                    break
+
+            if list_branches_tool:
+                branches_response = await list_branches_tool.ainvoke({
+                    "project_id": self.project_id
+                })
+
+                if isinstance(branches_response, str):
+                    import json
+                    try:
+                        branches = json.loads(branches_response)
+                        if isinstance(branches, list):
+                            # Check if feature branch exists (might indicate work in progress)
+                            for branch in branches:
+                                branch_name = branch.get('name', '')
+                                if branch_name.startswith(branch_pattern):
+                                    # Branch exists, but check if it's been merged
+                                    print(f"[CHECK] Found branch {branch_name} for issue #{issue_id}")
+                                    return False  # Work in progress, don't skip
+                    except json.JSONDecodeError:
+                        pass
+
+            # Check merge requests for this issue
+            list_mrs_tool = None
+            for tool in self.tools:
+                if hasattr(tool, 'name') and tool.name == 'list_merge_requests':
+                    list_mrs_tool = tool
+                    break
+
+            if list_mrs_tool:
+                mrs_response = await list_mrs_tool.ainvoke({
+                    "project_id": self.project_id,
+                    "state": "merged"
+                })
+
+                if isinstance(mrs_response, str):
+                    import json
+                    try:
+                        mrs = json.loads(mrs_response)
+                        if isinstance(mrs, list):
+                            for mr in mrs:
+                                mr_title = mr.get('title', '').lower()
+                                mr_description = mr.get('description', '').lower()
+                                source_branch = mr.get('source_branch', '')
+
+                                # Check if MR mentions this issue or uses issue branch pattern
+                                if (f"#{issue_id}" in mr_title or
+                                    f"#{issue_id}" in mr_description or
+                                    f"issue-{issue_id}" in source_branch or
+                                    f"closes #{issue_id}" in mr_description):
+                                    print(f"[CHECK] Issue #{issue_id} already merged in MR: {mr.get('title')}")
+                                    return True
+                    except json.JSONDecodeError:
+                        pass
+
+        except Exception as e:
+            print(f"[CHECK] Error checking completion status for issue #{issue_id}: {e}")
+
+        return False
+
     async def _execute_planning_with_retry(self, apply_changes: bool) -> bool:
         """Execute planning agent with retry logic."""
         for attempt in range(self.max_retries):
@@ -776,149 +1009,18 @@ class Supervisor:
             print(f"[MCP] ❌ Failed to fetch issues: {e}")
             return []
     
-    async def _sync_plan_with_gitlab_issues(self):
+    async def _update_orchestration_plan_for_completed_issue(self, issue: Dict[str, Any]):
         """
-        Optionally sync the orchestration plan with current GitLab issues.
-        This can be used to update issue states if needed.
+        Track completed issue (simplified - no longer maintains orchestration plans).
         """
-        if not self.current_plan:
-            return
-        
-        gitlab_issues = await self._fetch_gitlab_issues_via_mcp()
-        if not gitlab_issues:
-            return
-        
-        # Create mapping of GitLab issues
-        gitlab_map = {str(i.get('iid')): i for i in gitlab_issues}
-        
-        # Update plan issues with current GitLab state
-        for plan_issue in self.current_plan.get('issues', []):
-            issue_id = str(plan_issue.get('iid'))
-            if issue_id in gitlab_map:
-                # Update state from GitLab
-                gitlab_issue = gitlab_map[issue_id]
-                plan_issue['state'] = gitlab_issue.get('state', 'opened')
-                
-                # Skip closed issues
-                if gitlab_issue.get('state') == 'closed':
-                    plan_issue['implementation_status'] = 'completed'
-        
-        print(f"[SYNC] Updated plan with GitLab issue states")
-    
-    async def _load_checkpoint(self):
-        """Load execution checkpoint for recovery."""
-        checkpoint_file = self.checkpoint_dir / f"supervisor_{self.project_id}.json"
-        
-        try:
-            if checkpoint_file.exists():
-                with open(checkpoint_file, 'r') as f:
-                    checkpoint = json.load(f)
-                
-                self.completed_issues = checkpoint.get('completed_issues', [])
-                self.failed_issues = checkpoint.get('failed_issues', [])
-                self.state = ExecutionState(checkpoint.get('state', 'initializing'))
-                
-                print(f"[CHECKPOINT] Loaded - {len(self.completed_issues)} completed, {len(self.failed_issues)} failed")
-                return True
-        except Exception as e:
-            print(f"[CHECKPOINT] Could not load: {e}")
-        
-        return False
-    
-    async def _save_checkpoint(self):
-        """Save execution checkpoint for recovery."""
-        checkpoint_file = self.checkpoint_dir / f"supervisor_{self.project_id}.json"
-        
-        checkpoint = {
-            'project_id': self.project_id,
-            'state': self.state.value,
-            'completed_issues': self.completed_issues,
-            'failed_issues': self.failed_issues,
-            'timestamp': datetime.now().isoformat()
-        }
-        
-        try:
-            with open(checkpoint_file, 'w') as f:
-                json.dump(checkpoint, f, indent=2)
-            print("[CHECKPOINT] Saved execution state")
-        except Exception as e:
-            print(f"[CHECKPOINT] Could not save: {e}")
-    
-    async def _implement_issue_with_retry(self, issue: Dict) -> bool:
-        """
-        Implement issue with retry logic for resilience.
-        """
-        issue_id = issue.get('iid')
-        
-        for attempt in range(self.max_retries):
-            if attempt > 0:
-                print(f"[RETRY] Issue #{issue_id} attempt {attempt + 1}/{self.max_retries}")
-                await asyncio.sleep(self.retry_delay * attempt)
-            
-            try:
-                # Use existing issue manager for implementation
-                success = await self.implement_issue(issue)
-                if success:
-                    return True
-            except Exception as e:
-                print(f"[ERROR] Issue #{issue_id} attempt {attempt + 1} failed: {e}")
-        
-        return False
-    
-    async def _update_orchestration_plan_for_completed_issue(self, issue_id: str):
-        """
-        Update the orchestration plan to mark an issue as completed.
-        This addresses the user's request to update the plan when issues are implemented.
-        """
-        try:
-            # Check if we have a current plan to update
-            if not self.current_plan:
-                print(f"[PLAN UPDATE] No current plan to update for issue #{issue_id}")
-                return
-            
-            # Find and update the issue in the current plan
-            updated = False
-            if "issues" in self.current_plan:
-                for issue in self.current_plan["issues"]:
-                    if str(issue.get("iid")) == str(issue_id):
-                        issue["implementation_status"] = "complete"
-                        issue["completed_at"] = datetime.now().isoformat()
-                        updated = True
-                        break
-            
-            if updated:
-                # Update overall plan statistics
-                if "completed_issues" in self.current_plan:
-                    self.current_plan["completed_issues"] += 1
-                else:
-                    self.current_plan["completed_issues"] = 1
-                
-                # Update implementation status if all issues are complete
-                total_issues = len(self.current_plan.get("issues", []))
-                completed_issues = self.current_plan.get("completed_issues", 0)
-                
-                if completed_issues >= total_issues:
-                    self.current_plan["implementation_status"] = "complete"
-                elif completed_issues > 0:
-                    self.current_plan["implementation_status"] = "partial"
-                
-                # Write updated plan back to file
-                plan_file = Path("docs/ORCH_PLAN.json")
-                if plan_file.exists() or plan_file.parent.exists():
-                    plan_file.parent.mkdir(exist_ok=True)
-                    with open(plan_file, 'w', encoding='utf-8') as f:
-                        json.dump(self.current_plan, f, indent=2, ensure_ascii=False)
-                    
-                    print(f"[PLAN UPDATE] ✅ Updated orchestration plan - Issue #{issue_id} marked as complete")
-                    print(f"[PLAN UPDATE] Progress: {completed_issues}/{total_issues} issues complete")
-                else:
-                    print(f"[PLAN UPDATE] ⚠️ Could not write to docs/ORCH_PLAN.json - directory may not exist")
-            else:
-                print(f"[PLAN UPDATE] ⚠️ Issue #{issue_id} not found in current plan")
-                
-        except Exception as e:
-            print(f"[PLAN UPDATE] ❌ Failed to update orchestration plan for issue #{issue_id}: {e}")
-            print(f"[ERROR] Plan update failed for issue #{issue_id}: {e}")
+        # Simply track completion - orchestration plans are deprecated
+        issue_id = issue.get('iid') or issue.get('id')
+        self.completed_issues.append(issue)  # Store full issue object
+        total = len(self.gitlab_issues) if self.gitlab_issues else 0
+        completed = len(self.completed_issues)
+
+        if total > 0:
+            print(f"[PROGRESS] Issue #{issue_id} completed ({completed}/{total} done)")
     
     async def _analyze_and_fix_pipeline_failures(self, issue_id: str):
         """
@@ -1042,25 +1144,25 @@ class Supervisor:
 
 # Helper function for running supervisor (expected by __init__.py)
 async def run_supervisor(
-    project_id: str, 
-    mode: str = "implement", 
-    specific_issue: str = None, 
-    resume_from: str = None, 
+    project_id: str,
+    mode: str = "implement",
+    specific_issue: str = None,
+    resume_from: str = None,
     tech_stack: dict = None
 ):
     """
     Helper function to run supervisor with the specified parameters.
-    
+
     Args:
         project_id: GitLab project ID
         mode: Execution mode ("analyze" or "implement")
         specific_issue: Specific issue ID for single issue mode
         resume_from: Path to resume state (not used in simplified version)
-        tech_stack: Technology stack preferences (not used in simplified version)
+        tech_stack: Technology stack preferences
     """
-    supervisor = Supervisor(project_id)
-    
+    supervisor = Supervisor(project_id, tech_stack=tech_stack)
+
     # Map mode to supervisor execution mode
     exec_mode = "implement" if mode == "implement" else "analyze"
-    
+
     await supervisor.execute(mode=exec_mode, specific_issue=specific_issue)

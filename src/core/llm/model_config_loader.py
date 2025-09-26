@@ -228,28 +228,3 @@ _model_config_loader = ModelConfigLoader()
 def get_model_config_loader() -> ModelConfigLoader:
     """Get the global model configuration loader instance."""
     return _model_config_loader
-
-
-def reload_model_configs():
-    """Force reload of all model configurations."""
-    global _model_config_loader
-    _model_config_loader._loaded = False
-    _model_config_loader._configs = {}
-    return _model_config_loader.load_all_configs()
-
-
-def list_available_providers() -> List[str]:
-    """Quick function to list all available providers."""
-    return _model_config_loader.get_available_providers()
-
-
-def get_provider_models(provider: str) -> Dict[str, str]:
-    """Quick function to get model display names for a provider."""
-    models = _model_config_loader.get_models_for_provider(provider)
-    return {model_id: model_info.get("display_name", model_id) 
-            for model_id, model_info in models.items()}
-
-
-def validate_provider(provider: str) -> Tuple[bool, str]:
-    """Quick function to validate a provider setup."""
-    return _model_config_loader.validate_provider_setup(provider)

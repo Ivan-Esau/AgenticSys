@@ -11,30 +11,35 @@ from typing import Tuple, List, Any
 async def load_mcp_tools() -> Tuple[List[Any], MultiServerMCPClient]:
     """
     Initialize MCP client and load GitLab tools.
-    
+
     Returns:
         Tuple of (tools list, MCP client instance)
     """
     url = Config.get_mcp_url()
-    
+
     # Suppress MCP initialization errors/warnings
     import logging
     import os
+    import sys
     from contextlib import redirect_stdout, redirect_stderr
-    
+
     # Temporarily disable MCP-related logging during initialization
     mcp_loggers = [
         logging.getLogger('langchain_mcp_adapters'),
         logging.getLogger('mcp'),
         logging.getLogger('httpx'),
-        logging.getLogger('httpcore')
+        logging.getLogger('httpcore'),
+        logging.getLogger('asyncio')
     ]
-    
+
     original_levels = {}
     for logger in mcp_loggers:
         original_levels[logger] = logger.level
-        logger.setLevel(logging.ERROR)  # Only show actual errors, not warnings
-    
+        logger.setLevel(logging.CRITICAL)  # Only show critical errors
+
+    # Suppress stderr session termination messages during init
+    original_stderr = sys.stderr
+
     try:
         # Initialize multi-server MCP client with comprehensive suppression
         with open(os.devnull, 'w') as devnull:
@@ -45,16 +50,19 @@ async def load_mcp_tools() -> Tuple[List[Any], MultiServerMCPClient]:
                         "transport": Config.MCP_TRANSPORT
                     }
                 })
-                
+
                 # Load tools from GitLab server
                 tools = await client.get_tools(server_name="gitlab")
-        
+
+        # Return tools directly - wrapping breaks LangGraph compatibility
         return tools, client
-    
+
     finally:
-        # Restore original logging levels
+        # Restore original logging levels and stderr
+        sys.stderr = original_stderr
         for logger, level in original_levels.items():
             logger.setLevel(level)
+
 
 
 async def get_common_tools_and_client() -> Tuple[List[Any], MultiServerMCPClient]:

@@ -4,13 +4,18 @@ Separated from logic for easier maintenance and modification.
 """
 
 from .prompt_templates import PromptTemplates
+from .config_utils import get_tech_stack_prompt
 
 def get_planning_prompt(pipeline_config=None):
     """Get planning prompt with dynamic pipeline configuration."""
     pipeline_template = PromptTemplates.get_pipeline_template(pipeline_config)
-    
+
+    # Get standardized tech stack info
+    tech_stack_info = get_tech_stack_prompt(pipeline_config, "planning")
+
     return f"""
 You are the Smart Planning Agent with STATE INTELLIGENCE.
+{tech_stack_info}
 
 INTELLIGENT INFORMATION-AWARE WORKFLOW:
 1) COMPREHENSIVE STATE ANALYSIS - Analyze ALL available information:
@@ -90,7 +95,7 @@ CRITICAL RULES - ANALYSIS ONLY
   // TODO: Add state management for pause/resume
   [existing code preserved below - NEVER DELETE]
   ```
-- Always include `project_id` on GitLab tool calls.
+- Always include project_id in tool calls
 - Single multi-file commit ONLY if no plan exists yet.
 
 OUTPUT

@@ -146,6 +146,8 @@ For reference only:
             instructions.append("   - Use @Test annotations")
             instructions.append("   - Follow *Test.java naming convention")
             instructions.append("   - Run with: mvn test")
+            instructions.append("   - CRITICAL: Add JaCoCo plugin to pom.xml for coverage")
+            instructions.append("   - Ensure pom.xml has jacoco-maven-plugin configured")
         elif test_framework == 'go test':
             instructions.append("   - Write tests in *_test.go files")
             instructions.append("   - Use testing.T for test functions")
@@ -162,8 +164,13 @@ For reference only:
         instructions.append("")
         
         # Coverage
+        coverage_tool = config.get('coverage_tool', 'default')
         instructions.append(f"3. ENSURE MINIMUM {config.get('min_coverage', 70)}% COVERAGE:")
-        instructions.append(f"   - Use coverage tool: {config.get('coverage_tool', 'default')}")
+        instructions.append(f"   - Use coverage tool: {coverage_tool}")
+        if coverage_tool == 'jacoco':
+            instructions.append("   - MANDATORY: Update pom.xml with JaCoCo plugin configuration")
+            instructions.append("   - Plugin must include prepare-agent and report executions")
+            instructions.append("   - Generates target/site/jacoco/jacoco.xml for GitLab")
         instructions.append(f"   - Test all core functionalities")
         instructions.append(f"   - Include edge cases and error handling")
         instructions.append("")
