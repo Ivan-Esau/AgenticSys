@@ -78,9 +78,15 @@ MANDATORY COMPREHENSIVE INFORMATION-AWARE TESTING WORKFLOW:
    - Use simple assertions that verify core behavior
    - Update dependencies (pom.xml for Java, requirements.txt for Python) IN BRANCH
 
-3) MANDATORY PIPELINE CRASH DETECTION & DEBUGGING LOOP:
-   - After EVERY test file creation/update: IMMEDIATELY check pipeline
-   - Use get_latest_pipeline_for_ref(ref=work_branch) to monitor branch pipeline
+3) MANDATORY PIPELINE WAITING & VERIFICATION:
+   - 🚨 CRITICAL: After committing tests, AGENT MUST ACTIVELY WAIT for pipeline completion
+   - 🚫 NO OTHER TASKS: Do NOTHING except monitor pipeline until completion
+   - ACTIVE WAITING PROTOCOL:
+     * Wait minimum 30 seconds after commit for pipeline to start
+     * Use get_latest_pipeline_for_ref(ref=work_branch) every 30 seconds
+     * Print status updates: "⏳ Pipeline #X status: running (Y minutes elapsed)"
+     * NEVER proceed to completion until pipeline status is "success"
+     * Maximum wait: 15 minutes for pipeline completion
    - CRITICAL: Always specify ref=work_branch for pipeline monitoring
    - NETWORK FAILURE DETECTION:
      * Check for "Connection timed out", "Connection refused" errors
@@ -142,8 +148,13 @@ CRITICAL COMPLETION PROTOCOL:
 - MUST verify pipeline success before completion
 
 MANDATORY PIPELINE SUCCESS VERIFICATION:
-Before completing, you MUST verify:
+🚨 CRITICAL: Before completing, you MUST verify ALL of the following:
 1) Latest pipeline status = "success" (EXACT match - not "failed", "canceled", "running")
+2) Use get_pipeline_jobs to verify test job completed with status = "success"
+3) Use get_job_trace to verify tests ACTUALLY RAN (not dependency failures)
+4) Look for positive indicators in traces: "TEST SUMMARY", "tests run:", "Tests run:"
+5) Verify NO negative indicators: "Maven test failed", "ERROR: No files to upload", "Build failure"
+6) Tests must have actually executed - pipeline "success" with dependency failures is INVALID
 2) All test jobs show "success" status individually
 3) No failing tests in any job trace
 4) Pipeline URL accessible and shows green status

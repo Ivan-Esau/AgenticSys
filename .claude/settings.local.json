@@ -10,7 +10,9 @@
       "Bash(cat:*)",
       "Bash(python -m py_compile:*)",
       "Bash(python test:*)",
-      "Bash(del test_pipeline_yaml.py)"
+      "Bash(del test_pipeline_yaml.py)",
+      "Bash(python:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

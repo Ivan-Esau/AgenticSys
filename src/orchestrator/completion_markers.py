@@ -28,7 +28,11 @@ class CompletionMarkers:
             "existing orchestration plan found",
             "planning analysis complete",
             "ready for implementation",
-            "project analysis completed"
+            "project analysis completed",
+            "ci/cd foundation established",
+            "foundation created",
+            "pipeline configured",
+            "working pipeline"
         ],
         "coding": [
             "implementation complete",
@@ -144,7 +148,8 @@ class CompletionMarkers:
         base_signal = cls.SIGNALS.get(agent_type, "COMPLETION")
 
         if agent_type == "planning":
-            return f"{base_signal}: Planning analysis complete. Ready for implementation."
+            tech_stack = kwargs.get('tech_stack', 'configured')
+            return f"{base_signal}: Planning analysis complete. CI/CD foundation established with working {tech_stack} pipeline. Ready for implementation."
 
         elif agent_type == "coding":
             issue_part = f"Issue #{issue_id} " if issue_id else ""

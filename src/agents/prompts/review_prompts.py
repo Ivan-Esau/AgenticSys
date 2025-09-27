@@ -69,9 +69,11 @@ COMPREHENSIVE INFORMATION-AWARE REVIEW PROCESS:
 
 3) COMPREHENSIVE PIPELINE MONITORING AND ANALYSIS:
    - CRITICAL PIPELINE VERIFICATION PROTOCOL:
-     * NEVER proceed to merge without explicit pipeline SUCCESS status
+     * 🚨 AGENT MUST ACTIVELY WAIT for pipeline completion - NO other tasks
      * Pipeline status MUST be "success" - not "failed", "canceled", or "running"
-     * If pipeline is missing or not started: WAIT for it to be created
+     * If pipeline is missing: WAIT for it to be created (up to 15 minutes)
+     * If pipeline is running: WAIT and monitor every 30 seconds
+     * Print status updates: "⏳ Pipeline #X status: running (Y minutes elapsed)"
    - PIPELINE STATE ANALYSIS: Get latest pipeline for the source branch
      * If pipeline is running: WAIT and monitor (check every 30s, max 10 minutes)
      * Track pipeline progress through different stages (build, test, deploy)

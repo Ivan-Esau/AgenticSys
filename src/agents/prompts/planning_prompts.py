@@ -71,7 +71,28 @@ IF AND ONLY IF no plan exists:
      * Existing configuration files and dependencies
      * Current source code patterns and imports
      * Build and deployment configuration
-2) SYNTHESIZE efficiently to avoid token limits:
+
+2) CREATE WORKING CI/CD FOUNDATION (CRITICAL FOR PIPELINE SUCCESS):
+   - MANDATORY: Create .gitlab-ci.yml with working pipeline configuration
+     * Use pipeline_config to generate proper YAML for detected tech stack
+     * Ensure Maven/npm/pip dependency resolution works correctly
+     * Include proper test and build jobs without fallback commands
+     * Add artifact collection for test reports and coverage
+   - ESSENTIAL PROJECT STRUCTURE:
+     * Create basic directory structure (src/, tests/, docs/)
+     * Add minimal dependencies file (requirements.txt/package.json/pom.xml)
+     * Create __init__.py files for Python projects to fix import issues
+     * Add .gitignore with appropriate patterns for tech stack
+   - PIPELINE VERIFICATION FILES:
+     * Create basic test file that will pass to validate pipeline
+     * Add build configuration that compiles/validates code
+     * Ensure all paths and imports are correct for first pipeline run
+   - COMMIT STRUCTURE FOUNDATION:
+     * Single commit: "feat: initialize project structure and CI/CD foundation"
+     * Include ALL foundation files needed for working pipeline
+     * Test directory structure, dependencies, and basic CI/CD config
+
+3) SYNTHESIZE efficiently to avoid token limits:
    - OVERVIEW (scope, goals, technical approach) - keep concise
    - RESPECT TECH STACK: If user specified backend/frontend languages, use those for new projects
    - DETAILED PLAN accounting for ALL issues (ensure complete coverage):
@@ -79,15 +100,22 @@ IF AND ONLY IF no plan exists:
      * Use efficient descriptions to fit within limits
      * Prioritize issues based on dependencies and complexity
    - STRUCTURE (essential folders + files only)
-3) ANALYSIS ONLY (NO FILE CREATION):
-   - Analyze existing GitLab issues and project structure
-   - Provide summary of implementation approach
-   - DO NOT create any files, branches, or merge requests
 
-CRITICAL RULES - ANALYSIS ONLY
-- DO NOT create any files or branches
-- ONLY analyze existing GitLab issues and provide summary
-- Return simple text analysis, not file creation
+4) FOUNDATION CREATION AND VALIDATION (ESSENTIAL FOR PIPELINE SUCCESS):
+   - Create working project foundation that enables successful first pipeline
+   - Establish proper directory structure and dependencies
+   - Ensure CI/CD configuration works immediately
+   - MANDATORY: After committing foundation files, WAIT for pipeline completion
+     * Use get_latest_pipeline_for_ref to monitor pipeline status
+     * Check every 30 seconds until pipeline completes (max 10 minutes)
+     * Only proceed if pipeline status is "success"
+     * If pipeline fails, analyze errors and fix before completing
+
+CRITICAL RULES - FOUNDATION CREATION
+- MUST create working CI/CD foundation for pipeline success
+- CREATE .gitlab-ci.yml, basic project structure, and dependencies
+- ENSURE first pipeline run will succeed with proper test/build jobs
+- Single commit with all foundation files
 - Example for existing code:
   ```
   // EXISTING: GameLoop class implemented with basic tick functionality
@@ -98,25 +126,39 @@ CRITICAL RULES - ANALYSIS ONLY
 - Always include project_id in tool calls
 - Single multi-file commit ONLY if no plan exists yet.
 
-OUTPUT
-- End with a concise analysis summary:
-  A) Planning status (analysis completed)
-  B) Issue count and priority assessment
-  C) Implementation approach summary
+MANDATORY COMPLETION SIGNAL:
+When you have completed both analysis AND foundation creation, you MUST:
+1. Verify pipeline succeeded (status = "success")
+2. Include pipeline ID and URL in completion message
+3. Only then end with:
 
-- IMPORTANT: Only provide text analysis, no file creation
-- Focus on issue prioritization and implementation approach
+"PLANNING_PHASE_COMPLETE: Planning analysis complete. CI/CD foundation established with working [tech_stack] pipeline. Pipeline #[ID] succeeded at [URL]. Ready for implementation."
+
+Example: "PLANNING_PHASE_COMPLETE: Planning analysis complete. CI/CD foundation established with working Java/Maven pipeline. Pipeline #123 succeeded at https://gitlab.com/project/-/pipelines/123. Ready for implementation."
+
+CRITICAL: DO NOT complete without successful pipeline validation!
+
+OUTPUT REQUIREMENTS:
+- End with the mandatory completion signal above
+- Include confirmation of CI/CD foundation creation
+- Specify the tech stack for which pipeline was configured
+- Confirm pipeline is ready for testing and coding agents
+
+FOUNDATION VALIDATION:
+- Verify .gitlab-ci.yml was created with proper tech stack configuration
+- Confirm basic project structure exists (src/, tests/, dependencies file)
+- Ensure basic test file exists that will pass in first pipeline run
+- Validate all imports and paths are correct for immediate pipeline success
 
 EXAMPLE OUTPUT:
 ```
-✅ Planning Analysis Complete!
+✅ CI/CD Foundation Created!
 
-Status: Project analysis completed
-Issues: 8 total GitLab issues analyzed
-Priority: Issues 1-3 (core functionality) → Issues 4-6 (features) → Issues 7-8 (UI)
-Tech Stack: Python backend detected
-Approach: Implement issues sequentially based on dependencies
+Analysis: 8 total GitLab issues analyzed and prioritized
+Foundation: Created .gitlab-ci.yml, src/, tests/, requirements.txt, basic test file
+Tech Stack: Python/pytest pipeline configured with proper dependency resolution
+Validation: Basic test file will pass, imports configured correctly
 
-Ready for implementation phase.
-"""
+PLANNING_PHASE_COMPLETE: Planning analysis complete. CI/CD foundation established with working Python pipeline. Ready for implementation.
+```"""
 

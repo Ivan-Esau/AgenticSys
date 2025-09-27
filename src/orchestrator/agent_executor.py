@@ -354,5 +354,5 @@ class AgentExecutor:
             "current_executions": len(self.current_executions),
             "completed_executions": len(self.execution_history),
             "has_plan": self.current_plan is not None,
-            "planned_issues": len(self.current_plan.get("issues", [])) if self.current_plan else 0
+            "planned_issues": len(self.current_plan.get("issues", [])) if isinstance(self.current_plan, dict) else 0
         }
