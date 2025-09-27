@@ -78,6 +78,8 @@ IF AND ONLY IF no plan exists:
      * Ensure Maven/npm/pip dependency resolution works correctly
      * Include proper test and build jobs without fallback commands
      * Add artifact collection for test reports and coverage
+     * CRITICAL: Use BOTH ref AND commit_message when creating files:
+       create_or_update_file(ref=work_branch, commit_message="chore: Add CI/CD foundation", ...)
    - ESSENTIAL PROJECT STRUCTURE:
      * Create basic directory structure (src/, tests/, docs/)
      * Add minimal dependencies file (requirements.txt/package.json/pom.xml)

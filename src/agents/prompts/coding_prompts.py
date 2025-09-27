@@ -94,10 +94,13 @@ TECH STACK SPECIFIC INSTRUCTIONS:
    - If work_branch exists: Use it as-is, but ensure you're working on it
    - ALL file operations MUST happen in the feature branch, NEVER in master/main
    - IMPORTANT: Always specify ref=work_branch in ALL file operations:
-     * create_or_update_file MUST include ref=work_branch
+     * create_or_update_file MUST include ref=work_branch AND commit_message
+       Example: create_or_update_file(ref=work_branch, commit_message="feat: Add project overview", file_path="...", content="...")
      * get_file_contents MUST include ref=work_branch
      * get_repo_tree MUST include ref=work_branch
    - VERIFY files exist after creation by reading them back with ref=work_branch
+   - CRITICAL: If file creation fails, check you included BOTH ref AND commit_message parameters
+   - Maximum 3 retry attempts for any failed operation - then report error
 
 5) CODE GENERATION AND FILE MANAGEMENT:
    - Read ALL files mentioned in plan before starting

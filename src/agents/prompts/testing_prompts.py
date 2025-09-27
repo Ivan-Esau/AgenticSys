@@ -70,9 +70,11 @@ MANDATORY COMPREHENSIVE INFORMATION-AWARE TESTING WORKFLOW:
      * Avoid triggering pipeline with every file change
      * Make one commit for test implementation: "test: add tests for issue #X"
      * Make separate commit only if fixing pipeline issues
-   - Create test files using create_or_update_file(ref=work_branch, ...)
+   - Create test files using create_or_update_file(ref=work_branch, commit_message="test: Add tests", ...)
+     CRITICAL: Must include BOTH ref=work_branch AND commit_message parameters
    - For Java/Maven: Create tests in src/test/java/ directory structure
    - For Python: Create tests in tests/ directory
+   - Maximum 3 retry attempts if file creation fails - check parameters!
    - Create basic, functional tests that WILL PASS
    - Focus on testing actual functionality, not edge cases initially
    - Use simple assertions that verify core behavior
