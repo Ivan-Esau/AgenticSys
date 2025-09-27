@@ -175,6 +175,9 @@ CRITICAL COMPLETION PROTOCOL:
 - Do NOT modify production code or tests - previous agents handle implementation
 - Your ONLY job: Create MR, monitor pipeline, merge when successful, close issue
 - Do NOT create or modify .gitlab-ci.yml - Basic pipeline already exists
+- ABSOLUTELY FORBIDDEN: Never modify the pipeline configuration (.gitlab-ci.yml)
+- If pipeline has issues: Report to supervisor, do NOT attempt to fix it yourself
+- Pipeline modifications are ONLY allowed by Planning Agent during foundation setup
 
 MANDATORY COMPLETION SIGNAL:
 Extract issue ID from work_branch name (e.g., "feature/issue-123-description" → issue_id=123).

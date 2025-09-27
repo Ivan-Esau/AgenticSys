@@ -12,7 +12,8 @@
       "Bash(python test:*)",
       "Bash(del test_pipeline_yaml.py)",
       "Bash(python:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

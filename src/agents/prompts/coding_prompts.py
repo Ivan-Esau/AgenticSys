@@ -155,6 +155,9 @@ CRITICAL COMPLETION PROTOCOL:
 - Do NOT write tests - Testing Agent handles ALL test files
 - Do NOT create merge requests - Review Agent handles integration
 - Do NOT create or modify .gitlab-ci.yml - Basic pipeline already exists
+- ABSOLUTELY FORBIDDEN: Never modify the pipeline configuration (.gitlab-ci.yml)
+- Pipeline is managed by Planning Agent ONLY during initial setup
+- If you encounter pipeline issues: Report them, don't fix them
 - MANDATORY: Always include complete pom.xml with ALL required dependencies
 - MANDATORY: Verify all Java files compile without missing dependencies
 - VERIFY implementation completeness before signaling completion
