@@ -21,6 +21,12 @@ class PipelineMonitor:
         self.pipeline_tool = None
         self.pipeline_jobs_tool = None
         self.job_trace_tool = None
+        self.cancel_pipeline_tool = None
+        self.get_pipeline_tool = None
+
+        # Track current pipeline being monitored
+        self.current_pipeline_id = None
+        self.monitored_pipelines = set()  # Track all pipelines we've monitored
 
         # Initialize pipeline tools
         self._init_tools()
@@ -35,12 +41,17 @@ class PipelineMonitor:
                     self.pipeline_jobs_tool = tool
                 elif tool.name == 'get_job_trace':
                     self.job_trace_tool = tool
+                elif tool.name == 'cancel_pipeline':
+                    self.cancel_pipeline_tool = tool
+                elif tool.name == 'get_pipeline':
+                    self.get_pipeline_tool = tool
 
     async def wait_for_pipeline_completion(
         self,
         branch: str,
-        timeout_minutes: int = 15,
-        check_interval_seconds: int = 30
+        timeout_minutes: int = 20,  # Increased default timeout
+        check_interval_seconds: int = 30,
+        specific_pipeline_id: Optional[str] = None  # Allow tracking specific pipeline
     ) -> Tuple[bool, str, Dict[str, Any]]:
         """
         Wait for pipeline completion on specified branch.
@@ -49,11 +60,15 @@ class PipelineMonitor:
             branch: Branch name to monitor
             timeout_minutes: Maximum time to wait
             check_interval_seconds: How often to check pipeline status
+            specific_pipeline_id: Optional specific pipeline ID to monitor
 
         Returns:
             Tuple of (success, status_message, pipeline_summary)
         """
-        print(f"[PIPELINE MONITOR] 🔍 Starting pipeline monitoring for branch: {branch}")
+        if specific_pipeline_id:
+            print(f"[PIPELINE MONITOR] 🎯 Monitoring SPECIFIC pipeline #{specific_pipeline_id}")
+        else:
+            print(f"[PIPELINE MONITOR] 🔍 Starting pipeline monitoring for branch: {branch}")
         print(f"[PIPELINE MONITOR] ⏰ Timeout: {timeout_minutes} minutes, Check interval: {check_interval_seconds}s")
 
         start_time = time.time()
@@ -297,3 +312,83 @@ class PipelineMonitor:
         except Exception as e:
             print(f"[PIPELINE MONITOR] ⚠️ Error getting job trace: {e}")
             return None
+
+    async def cancel_old_pipelines(self, branch: str, keep_pipeline_id: Optional[str] = None):
+        """
+        Cancel all old pipelines for a branch except the specified one.
+
+        Args:
+            branch: Branch name
+            keep_pipeline_id: Pipeline ID to keep running (all others will be canceled)
+        """
+        print(f"[PIPELINE MONITOR] 🚫 Canceling old pipelines for branch: {branch}")
+
+        try:
+            # Get all pipelines for the branch
+            if not self.pipeline_tool:
+                return
+
+            # Get recent pipelines (usually returns latest, but let's be thorough)
+            response = await self.pipeline_tool.ainvoke({
+                "project_id": self.project_id,
+                "ref": branch
+            })
+
+            if isinstance(response, str):
+                import json
+                pipelines = [json.loads(response)]
+            elif isinstance(response, list):
+                pipelines = response
+            elif isinstance(response, dict):
+                pipelines = [response]
+            else:
+                pipelines = []
+
+            # Cancel all pipelines except the one we want to keep
+            canceled_count = 0
+            for pipeline in pipelines:
+                pipeline_id = str(pipeline.get('id'))
+                status = pipeline.get('status', '')
+
+                # Skip if this is the pipeline we want to keep
+                if keep_pipeline_id and pipeline_id == str(keep_pipeline_id):
+                    print(f"[PIPELINE MONITOR] ✅ Keeping pipeline #{pipeline_id}")
+                    continue
+
+                # Cancel if it's still running
+                if status in ['pending', 'running', 'created']:
+                    if self.cancel_pipeline_tool:
+                        try:
+                            await self.cancel_pipeline_tool.ainvoke({
+                                "project_id": self.project_id,
+                                "pipeline_id": pipeline_id
+                            })
+                            canceled_count += 1
+                            print(f"[PIPELINE MONITOR] ❌ Canceled old pipeline #{pipeline_id}")
+                        except Exception as e:
+                            print(f"[PIPELINE MONITOR] ⚠️ Failed to cancel pipeline #{pipeline_id}: {e}")
+
+            if canceled_count > 0:
+                print(f"[PIPELINE MONITOR] 🧹 Canceled {canceled_count} old pipeline(s)")
+            else:
+                print(f"[PIPELINE MONITOR] ✅ No old pipelines to cancel")
+
+        except Exception as e:
+            print(f"[PIPELINE MONITOR] ⚠️ Error canceling old pipelines: {e}")
+
+    def set_current_pipeline(self, pipeline_id: str):
+        """
+        Set the current pipeline ID being monitored.
+        This helps agents track which pipeline is theirs.
+        """
+        self.current_pipeline_id = str(pipeline_id)
+        self.monitored_pipelines.add(str(pipeline_id))
+        print(f"[PIPELINE MONITOR] 🎯 Now monitoring pipeline #{pipeline_id}")
+
+    def get_current_pipeline(self) -> Optional[str]:
+        """Get the current pipeline ID being monitored."""
+        return self.current_pipeline_id
+
+    def is_my_pipeline(self, pipeline_id: str) -> bool:
+        """Check if a pipeline ID is the one we're currently monitoring."""
+        return str(pipeline_id) == str(self.current_pipeline_id)

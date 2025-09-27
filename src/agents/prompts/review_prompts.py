@@ -69,15 +69,24 @@ COMPREHENSIVE INFORMATION-AWARE REVIEW PROCESS:
 
 3) COMPREHENSIVE PIPELINE MONITORING AND ANALYSIS:
    - CRITICAL PIPELINE VERIFICATION PROTOCOL:
-     * 🚨 AGENT MUST ACTIVELY WAIT for pipeline completion - NO other tasks
-     * Pipeline status MUST be "success" - not "failed", "canceled", or "running"
+     * 🚨 AGENT MUST ACTIVELY WAIT for CURRENT pipeline completion - NO other tasks
+     * Get the LATEST pipeline ID for the merge request/branch
+     * Store it as "CURRENT_PIPELINE_ID = #XXXX"
+     * Monitor ONLY this specific pipeline, ignore all older ones
+     * Pipeline status MUST be "success" - not "failed", "canceled", "pending", or "running"
      * If pipeline is missing: WAIT for it to be created (up to 15 minutes)
      * If pipeline is running: WAIT and monitor every 30 seconds
-     * Print status updates: "⏳ Pipeline #X status: running (Y minutes elapsed)"
+     * Print status updates: "⏳ CURRENT Pipeline #XXXX status: running (Y minutes elapsed)"
+   - FORBIDDEN PIPELINE PRACTICES:
+     * ❌ NEVER use old pipeline results from before recent commits
+     * ❌ NEVER say "previous pipeline #XXX was successful" as validation
+     * ❌ NEVER merge if current pipeline is pending/running
+     * ❌ NEVER create new pipelines to bypass waiting
    - PIPELINE STATE ANALYSIS: Get latest pipeline for the source branch
-     * If pipeline is running: WAIT and monitor (check every 30s, max 10 minutes)
+     * Use get_latest_pipeline_for_ref(ref=work_branch) to find CURRENT pipeline
+     * If pipeline is running: WAIT and monitor (check every 30s, max 20 minutes)
      * Track pipeline progress through different stages (build, test, deploy)
-     * Monitor resource usage and execution time patterns
+     * Verify this is the pipeline AFTER all recent commits
    - NETWORK FAILURE HANDLING: Detect and retry for transient issues
      * Connection timeouts to Maven/NPM/PyPI repositories → RETRY pipeline (max 2 times)
      * Network errors (timeouts, DNS failures) → Wait 60s and retry pipeline

@@ -83,13 +83,25 @@ MANDATORY COMPREHENSIVE INFORMATION-AWARE TESTING WORKFLOW:
 3) MANDATORY PIPELINE WAITING & VERIFICATION:
    - 🚨 CRITICAL: After committing tests, AGENT MUST ACTIVELY WAIT for pipeline completion
    - 🚫 NO OTHER TASKS: Do NOTHING except monitor pipeline until completion
+   - STRICT PIPELINE DISCIPLINE:
+     * After ANY commit, immediately get pipeline ID with get_latest_pipeline_for_ref(ref=work_branch)
+     * Store the pipeline ID: "MY_PIPELINE_ID = #XXXX"
+     * Monitor ONLY this specific pipeline ID, ignore all others
+     * NEVER use old pipeline results from before your commits
+     * NEVER proceed if YOUR pipeline is still "pending" or "running"
+     * If pipeline is "pending" for > 5 minutes, KEEP WAITING (runners may be busy)
    - ACTIVE WAITING PROTOCOL:
      * Wait minimum 30 seconds after commit for pipeline to start
-     * Use get_latest_pipeline_for_ref(ref=work_branch) every 30 seconds
-     * Print status updates: "⏳ Pipeline #X status: running (Y minutes elapsed)"
-     * NEVER proceed to completion until pipeline status is "success"
-     * Maximum wait: 15 minutes for pipeline completion
+     * Use get_pipeline(project_id, pipeline_id=MY_PIPELINE_ID) every 30 seconds
+     * Print status updates: "⏳ MY Pipeline #XXXX status: running (Y minutes elapsed)"
+     * NEVER proceed to completion until YOUR pipeline status is "success"
+     * Maximum wait: 20 minutes for pipeline completion (runners can be slow)
    - CRITICAL: Always specify ref=work_branch for pipeline monitoring
+   - FORBIDDEN ACTIONS:
+     * ❌ NEVER say "pipeline is pending, but tests are correct" - WAIT for actual results
+     * ❌ NEVER use results from pipelines before your commits
+     * ❌ NEVER create multiple pipelines - wait for the current one
+     * ❌ NEVER assume tests pass without seeing pipeline results
    - NETWORK FAILURE DETECTION:
      * Check for "Connection timed out", "Connection refused" errors
      * Maven/NPM/PyPI repository connection failures
@@ -154,16 +166,17 @@ CRITICAL COMPLETION PROTOCOL:
 
 MANDATORY PIPELINE SUCCESS VERIFICATION:
 🚨 CRITICAL: Before completing, you MUST verify ALL of the following:
-1) Latest pipeline status = "success" (EXACT match - not "failed", "canceled", "running")
-2) Use get_pipeline_jobs to verify test job completed with status = "success"
+1) YOUR pipeline (MY_PIPELINE_ID) status = "success" (EXACT match - not "failed", "canceled", "running", "pending")
+2) Use get_pipeline_jobs(project_id, pipeline_id=MY_PIPELINE_ID) to verify test job completed with status = "success"
 3) Use get_job_trace to verify tests ACTUALLY RAN (not dependency failures)
 4) Look for positive indicators in traces: "TEST SUMMARY", "tests run:", "Tests run:"
 5) Verify NO negative indicators: "Maven test failed", "ERROR: No files to upload", "Build failure"
 6) Tests must have actually executed - pipeline "success" with dependency failures is INVALID
-2) All test jobs show "success" status individually
-3) No failing tests in any job trace
-4) Pipeline URL accessible and shows green status
-5) If pipeline fails after all retries: DO NOT mark complete, escalate to supervisor
+7) All test jobs show "success" status individually
+8) No failing tests in any job trace
+9) Pipeline URL must be for YOUR pipeline ID, not an older one
+10) If pipeline fails after all retries: DO NOT mark complete, escalate to supervisor
+11) ABSOLUTE RULE: If YOUR pipeline is still "pending" after 20 minutes, escalate to supervisor
 
 MANDATORY COMPLETION SIGNAL:
 Extract issue ID from work_branch name (e.g., "feature/issue-123-description" → issue_id=123).
