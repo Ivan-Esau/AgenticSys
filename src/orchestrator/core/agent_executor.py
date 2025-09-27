@@ -11,8 +11,8 @@ import json
 from pathlib import Path
 
 from src.core.llm.utils import extract_json_block
-from .completion_markers import CompletionMarkers
-from ..agents import (
+from ..utils import CompletionMarkers
+from ...agents import (
     planning_agent,
     coding_agent,
     testing_agent,

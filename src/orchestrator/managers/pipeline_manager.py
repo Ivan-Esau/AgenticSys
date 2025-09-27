@@ -5,7 +5,7 @@ Handles CI/CD pipeline operations including creation, monitoring, and failure an
 
 import json
 from typing import Dict, List, Optional, Any
-from .pipeline_config import PipelineConfig
+from ..pipeline import PipelineConfig
 
 
 class PipelineManager:

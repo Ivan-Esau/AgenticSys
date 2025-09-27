@@ -6,7 +6,7 @@ Ensures agents properly wait for pipeline completion before proceeding.
 import asyncio
 import time
 from typing import Dict, Any, Optional, Tuple
-from ..orchestrator.completion_markers import CompletionMarkers
+from ..utils import CompletionMarkers
 
 
 class PipelineMonitor:
