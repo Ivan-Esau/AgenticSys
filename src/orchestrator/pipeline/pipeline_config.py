@@ -101,30 +101,44 @@ class PipelineConfig:
                 ]
             })
         
-        # Java configuration - SIMPLE BUT REAL with JUnit 5
+        # Java configuration - ENHANCED for Spring Boot with JUnit 5
         elif self.backend == 'java':
             config.update({
                 'docker_image': 'maven:3.9-eclipse-temurin-21',  # Latest stable Maven with Java 21
                 'test_framework': 'junit5',  # Using JUnit 5 (Jupiter)
                 'package_manager': 'maven',
                 'requirements_file': 'pom.xml',
-                'coverage_tool': None,  # Skip coverage to keep it simple
+                'coverage_tool': None,  # Skip coverage initially for simplicity
                 'cache_paths': ['.m2/repository'],  # Cache Maven dependencies
                 'variables': {
-                    'MAVEN_OPTS': '-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository'
+                    'MAVEN_OPTS': '-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository',
+                    'MAVEN_CLI_OPTS': '--batch-mode --errors --fail-at-end --show-version'
                 },
                 'before_script': [
                     'java -version',
-                    'mvn --version'
+                    'mvn --version',
+                    '# Ensure Maven settings for reliability',
+                    'mkdir -p ~/.m2',
+                    'echo "<?xml version=\\"1.0\\"?><settings><localRepository>${user.home}/.m2/repository</localRepository></settings>" > ~/.m2/settings.xml'
                 ],
                 'test_commands': [
                     # Real test execution with JUnit 5 - will fail if tests fail
-                    'mvn clean test --batch-mode'
+                    'mvn clean test ${MAVEN_CLI_OPTS}',
+                    '# Show test results for pipeline monitoring',
+                    'echo "=== Test Results ==="',
+                    'find target/surefire-reports -name "*.txt" -exec echo {} \\; -exec head -20 {} \\; || echo "No test reports found"'
                 ],
                 'build_commands': [
                     # Real build - will fail if compilation fails
-                    'mvn compile --batch-mode'
-                ]
+                    'mvn compile ${MAVEN_CLI_OPTS}'
+                ],
+                # Spring Boot specific configuration
+                'spring_boot': {
+                    'parent_version': '3.2.0',
+                    'java_version': '21',
+                    'test_annotations': ['@SpringBootTest', '@WebMvcTest', '@DataJpaTest'],
+                    'package_structure': 'com.example'
+                }
             })
         
         # Go configuration
@@ -223,22 +237,6 @@ class PipelineConfig:
         
         # Simple but proper before script
         yaml_lines.append("before_script:")
-        # Minimal Maven setup for Java - just enough to handle common issues
-        if self.backend == 'java':
-            yaml_lines.extend([
-                "  # Basic environment check",
-                "  - java -version",
-                "  - mvn --version",
-                "  # Create minimal Maven settings for reliability",
-                "  - mkdir -p ~/.m2",
-                "  - |",
-                "    echo '<settings>",
-                "      <localRepository>${user.home}/.m2/repository</localRepository>",
-                "      <offline>false</offline>",
-                "    </settings>' > ~/.m2/settings.xml"
-            ])
-
-        # Add original before_script commands
         if self.config['before_script']:
             for cmd in self.config['before_script']:
                 yaml_lines.append(f"  - {cmd}")

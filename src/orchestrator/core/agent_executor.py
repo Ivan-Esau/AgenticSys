@@ -38,6 +38,10 @@ class AgentExecutor:
         # Pipeline configuration (set by supervisor)
         self.pipeline_config = None
         self.debugging_context = None
+
+        # Pipeline tracking between agents (KEY FIX)
+        self.testing_pipeline_id = None  # Store Testing Agent's pipeline ID
+        self.current_pipeline_id = None  # Current pipeline being monitored
     
     def _check_agent_success(self, agent_type: str, result: str) -> tuple[bool, float]:
         """
@@ -66,6 +70,34 @@ class AgentExecutor:
             print(f"[AGENT EXECUTOR] ⚠️ Partial match: {reason}")
 
         return success, confidence
+
+    def _extract_pipeline_id(self, agent_output: str) -> Optional[str]:
+        """
+        Extract pipeline ID from agent output.
+        Looks for patterns like:
+        - "Created MY pipeline: #4259"
+        - "Monitoring pipeline: #4259"
+        - "Pipeline #4259"
+        """
+        import re
+
+        # Look for various pipeline ID patterns
+        patterns = [
+            r"Created MY pipeline:\s*#(\d+)",  # Testing agent pattern
+            r"Monitoring pipeline:\s*#(\d+)",   # Review agent pattern
+            r"MY_PIPELINE_ID\s*=\s*['\"]?(\d+)", # Variable assignment
+            r"CURRENT_PIPELINE_ID\s*=\s*['\"]?(\d+)", # Review agent variable
+            r"Pipeline\s+#(\d+)\s+(?:status|completed)", # General pipeline mention
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, agent_output, re.IGNORECASE)
+            if match:
+                pipeline_id = match.group(1)
+                print(f"[AGENT EXECUTOR] Extracted pipeline ID: #{pipeline_id}")
+                return pipeline_id
+
+        return None
     
     async def execute_planning_agent(
         self,
@@ -189,7 +221,14 @@ class AgentExecutor:
             
             # Check for success
             success, confidence = self._check_agent_success("testing", result or "")
-            
+
+            # Extract and store Testing Agent's pipeline ID (KEY FIX)
+            if result:
+                pipeline_id = self._extract_pipeline_id(result)
+                if pipeline_id:
+                    self.testing_pipeline_id = pipeline_id
+                    print(f"[AGENT EXECUTOR] 📌 Stored Testing Agent pipeline: #{pipeline_id}")
+
             self._end_execution_tracking(execution_id, "success" if success else "failed")
             return success
             
@@ -224,6 +263,20 @@ class AgentExecutor:
             
             # Check for success - CRITICAL: Must verify pipeline passed
             success, confidence = self._check_agent_success("review", result or "")
+
+            # Extract and validate Review Agent's pipeline ID (KEY FIX)
+            if result:
+                pipeline_id = self._extract_pipeline_id(result)
+                if pipeline_id:
+                    self.current_pipeline_id = pipeline_id
+                    print(f"[AGENT EXECUTOR] 📌 Review Agent monitoring pipeline: #{pipeline_id}")
+
+                    # Validate it matches Testing Agent's pipeline
+                    if self.testing_pipeline_id and pipeline_id != self.testing_pipeline_id:
+                        print(f"[AGENT EXECUTOR] ⚠️ WARNING: Pipeline mismatch!")
+                        print(f"[AGENT EXECUTOR] Testing Agent: #{self.testing_pipeline_id}")
+                        print(f"[AGENT EXECUTOR] Review Agent: #{pipeline_id}")
+                        # This is a critical error - wrong pipeline!
 
             # Additional validation for review agent - must not have pipeline failures
             if success and "REVIEW_PHASE_COMPLETE" in (result or ""):

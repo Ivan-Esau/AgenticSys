@@ -28,6 +28,9 @@ class PipelineMonitor:
         self.current_pipeline_id = None
         self.monitored_pipelines = set()  # Track all pipelines we've monitored
 
+        # Simple agent-pipeline tracking (KEY FIX)
+        self.agent_pipelines = {}  # {agent_name: pipeline_id} - tracks which pipeline belongs to which agent
+
         # Initialize pipeline tools
         self._init_tools()
 
@@ -51,7 +54,8 @@ class PipelineMonitor:
         branch: str,
         timeout_minutes: int = 20,  # Increased default timeout
         check_interval_seconds: int = 30,
-        specific_pipeline_id: Optional[str] = None  # Allow tracking specific pipeline
+        specific_pipeline_id: Optional[str] = None,  # Allow tracking specific pipeline
+        agent_name: Optional[str] = None  # Track which agent is waiting
     ) -> Tuple[bool, str, Dict[str, Any]]:
         """
         Wait for pipeline completion on specified branch.
@@ -94,6 +98,17 @@ class PipelineMonitor:
                 pipeline_id = pipeline_info.get('id')
                 status = pipeline_info.get('status', 'unknown')
                 web_url = pipeline_info.get('web_url', 'N/A')
+
+                # Register pipeline for agent if first time seeing it
+                if agent_name and not self.get_agent_pipeline(agent_name):
+                    self.register_agent_pipeline(agent_name, pipeline_id)
+
+                # Validate if agent is monitoring correct pipeline
+                if agent_name and not self.validate_agent_pipeline(agent_name, pipeline_id):
+                    print(f"[PIPELINE MONITOR] ❌ Wrong pipeline! Agent {agent_name} should not use #{pipeline_id}")
+                    # Continue to find the right pipeline
+                    await asyncio.sleep(check_interval_seconds)
+                    continue
 
                 # Only print status changes to avoid spam
                 if status != last_status:
@@ -392,3 +407,44 @@ class PipelineMonitor:
     def is_my_pipeline(self, pipeline_id: str) -> bool:
         """Check if a pipeline ID is the one we're currently monitoring."""
         return str(pipeline_id) == str(self.current_pipeline_id)
+
+    def register_agent_pipeline(self, agent_name: str, pipeline_id: str) -> None:
+        """
+        Register a pipeline as belonging to a specific agent.
+        This is the KEY to preventing pipeline confusion.
+
+        Args:
+            agent_name: Name of the agent (e.g., 'testing', 'review')
+            pipeline_id: The pipeline ID created by this agent
+        """
+        self.agent_pipelines[agent_name] = str(pipeline_id)
+        print(f"[PIPELINE TRACKING] Registered pipeline #{pipeline_id} for {agent_name} agent")
+
+    def get_agent_pipeline(self, agent_name: str) -> Optional[str]:
+        """
+        Get the pipeline ID that belongs to a specific agent.
+
+        Args:
+            agent_name: Name of the agent
+
+        Returns:
+            Pipeline ID or None if not registered
+        """
+        return self.agent_pipelines.get(agent_name)
+
+    def validate_agent_pipeline(self, agent_name: str, pipeline_id: str) -> bool:
+        """
+        Validate that an agent is using the correct pipeline.
+
+        Args:
+            agent_name: Name of the agent
+            pipeline_id: Pipeline ID the agent is trying to use
+
+        Returns:
+            True if this is the correct pipeline for the agent
+        """
+        correct_pipeline = self.agent_pipelines.get(agent_name)
+        if correct_pipeline and str(pipeline_id) != str(correct_pipeline):
+            print(f"[PIPELINE WARNING] {agent_name} agent trying to use pipeline #{pipeline_id} but owns #{correct_pipeline}")
+            return False
+        return True

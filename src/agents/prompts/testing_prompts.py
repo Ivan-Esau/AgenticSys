@@ -83,12 +83,19 @@ MANDATORY COMPREHENSIVE INFORMATION-AWARE TESTING WORKFLOW:
 3) MANDATORY PIPELINE WAITING & VERIFICATION:
    - 🚨 CRITICAL: After committing tests, AGENT MUST ACTIVELY WAIT for pipeline completion
    - 🚫 NO OTHER TASKS: Do NOTHING except monitor pipeline until completion
-   - STRICT PIPELINE DISCIPLINE:
+   - STRICT PIPELINE DISCIPLINE (CRITICAL FIX):
      * After ANY commit, immediately get pipeline ID with get_latest_pipeline_for_ref(ref=work_branch)
-     * Store the pipeline ID: "MY_PIPELINE_ID = #XXXX"
-     * Monitor ONLY this specific pipeline ID, ignore all others
-     * NEVER use old pipeline results from before your commits
-     * NEVER proceed if YOUR pipeline is still "pending" or "running"
+     * MANDATORY: Store YOUR specific pipeline ID like this:
+       ```
+       pipeline_response = get_latest_pipeline_for_ref(ref=work_branch)
+       MY_PIPELINE_ID = pipeline_response['id']  # e.g., "4259"
+       print(f"[TESTING] Created MY pipeline: #{MY_PIPELINE_ID}")
+       # THIS IS YOUR PIPELINE - NEVER USE ANY OTHER!
+       ```
+     * Monitor ONLY this specific pipeline ID using: get_pipeline(pipeline_id=MY_PIPELINE_ID)
+     * NEVER use get_pipelines() or search for "successful pipelines"
+     * NEVER use old pipeline results from before your commits (e.g., #4255 when you created #4259)
+     * NEVER proceed if YOUR pipeline (MY_PIPELINE_ID) is still "pending" or "running"
      * If pipeline is "pending" for > 5 minutes, KEEP WAITING (runners may be busy)
    - ACTIVE WAITING PROTOCOL:
      * Wait minimum 30 seconds after commit for pipeline to start
@@ -97,11 +104,14 @@ MANDATORY COMPREHENSIVE INFORMATION-AWARE TESTING WORKFLOW:
      * NEVER proceed to completion until YOUR pipeline status is "success"
      * Maximum wait: 20 minutes for pipeline completion (runners can be slow)
    - CRITICAL: Always specify ref=work_branch for pipeline monitoring
-   - FORBIDDEN ACTIONS:
+   - FORBIDDEN ACTIONS (WILL CAUSE TASK FAILURE):
      * ❌ NEVER say "pipeline is pending, but tests are correct" - WAIT for actual results
      * ❌ NEVER use results from pipelines before your commits
+     * ❌ NEVER say "Found successful pipeline #4255" when YOUR pipeline is #4259
+     * ❌ NEVER use get_pipelines() to find "any successful pipeline"
      * ❌ NEVER create multiple pipelines - wait for the current one
      * ❌ NEVER assume tests pass without seeing pipeline results
+     * ❌ NEVER use a different pipeline ID than MY_PIPELINE_ID
    - NETWORK FAILURE DETECTION:
      * Check for "Connection timed out", "Connection refused" errors
      * Maven/NPM/PyPI repository connection failures

@@ -14,7 +14,9 @@
       "Bash(python:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(mkdir:*)",
+      "Bash(xargs git status:*)"
     ],
     "deny": [],
     "ask": []

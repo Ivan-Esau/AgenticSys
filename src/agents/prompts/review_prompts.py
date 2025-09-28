@@ -68,20 +68,28 @@ COMPREHENSIVE INFORMATION-AWARE REVIEW PROCESS:
 {pipeline_info}
 
 3) COMPREHENSIVE PIPELINE MONITORING AND ANALYSIS:
-   - CRITICAL PIPELINE VERIFICATION PROTOCOL:
+   - CRITICAL PIPELINE VERIFICATION PROTOCOL (FIXED):
      * 🚨 AGENT MUST ACTIVELY WAIT for CURRENT pipeline completion - NO other tasks
-     * Get the LATEST pipeline ID for the merge request/branch
-     * Store it as "CURRENT_PIPELINE_ID = #XXXX"
-     * Monitor ONLY this specific pipeline, ignore all older ones
+     * Get the LATEST pipeline ID for the merge request/branch:
+       ```
+       pipeline_response = get_latest_pipeline_for_ref(ref=work_branch)
+       CURRENT_PIPELINE_ID = pipeline_response['id']  # e.g., "4259"
+       print(f"[REVIEW] Verifying pipeline: #{CURRENT_PIPELINE_ID}")
+       # THIS MUST BE THE TESTING AGENT'S PIPELINE - NOT AN OLDER ONE!
+       ```
+     * Monitor ONLY this specific pipeline using: get_pipeline(pipeline_id=CURRENT_PIPELINE_ID)
      * Pipeline status MUST be "success" - not "failed", "canceled", "pending", or "running"
      * If pipeline is missing: WAIT for it to be created (up to 15 minutes)
      * If pipeline is running: WAIT and monitor every 30 seconds
-     * Print status updates: "⏳ CURRENT Pipeline #XXXX status: running (Y minutes elapsed)"
-   - FORBIDDEN PIPELINE PRACTICES:
+     * Print status updates: "⏳ Pipeline #{CURRENT_PIPELINE_ID} status: running (Y minutes elapsed)"
+   - FORBIDDEN PIPELINE PRACTICES (WILL CAUSE TASK FAILURE):
      * ❌ NEVER use old pipeline results from before recent commits
-     * ❌ NEVER say "previous pipeline #XXX was successful" as validation
+     * ❌ NEVER say "previous pipeline #4255 was successful" when current is #4259
+     * ❌ NEVER say "Found successful pipeline from 2 hours ago" as validation
      * ❌ NEVER merge if current pipeline is pending/running
      * ❌ NEVER create new pipelines to bypass waiting
+     * ❌ NEVER use get_pipelines() to find "any successful pipeline"
+     * ❌ NEVER accept a different pipeline ID than CURRENT_PIPELINE_ID
    - PIPELINE STATE ANALYSIS: Get latest pipeline for the source branch
      * Use get_latest_pipeline_for_ref(ref=work_branch) to find CURRENT pipeline
      * If pipeline is running: WAIT and monitor (check every 30s, max 20 minutes)
