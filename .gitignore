@@ -78,6 +78,19 @@ state_*.json
 debug_*.py
 test_*.py
 temp_*.py
+docs/session_state.json
+docs/SESSION_CONTEXT.md
+
+# Windows/System files
+nul
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Web GUI development
+web_gui/backend/__pycache__/
+web_gui/frontend/node_modules/
+web_gui/frontend/dist/
 
 # API keys and secrets
 *.key

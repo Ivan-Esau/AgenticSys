@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgenticSys Control Center</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1 class="logo">
+                    <span class="logo-icon">[AI]</span>
+                    AgenticSys Control Center
+                </h1>
+                <div class="header-status">
+                    <div class="connection-status" id="connectionStatus">
+                        <span class="status-dot" id="statusDot"></span>
+                        <span id="statusText">Connecting...</span>
+                    </div>
+                    <button class="theme-toggle" id="themeToggle" title="Toggle theme">
+                        <span class="theme-icon">[Dark]</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="container">
+            <!-- Control Panel -->
+            <section class="control-panel">
+                <h2>System Configuration</h2>
+
+                <!-- Project Configuration -->
+                <div class="config-section">
+                    <h3>Project Settings</h3>
+                    <div class="form-group">
+                        <label for="projectSelect">GitLab Project</label>
+                        <div class="input-with-button">
+                            <select id="projectSelect">
+                                <option value="">Select a project...</option>
+                            </select>
+                            <button id="refreshProjects" class="btn btn-small" title="Refresh projects">↻</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="projectId">Or enter Project ID manually</label>
+                        <input type="text" id="projectId" placeholder="Enter project ID or URL">
+                    </div>
+                    <div class="form-group">
+                        <label for="executionMode">Execution Mode</label>
+                        <select id="executionMode">
+                            <option value="implement_all">Implement All Issues</option>
+                            <option value="single_issue">Single Issue</option>
+                            <option value="analysis">Analysis Only</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="issueNumberGroup" style="display: none;">
+                        <label for="issueNumber">Issue Number</label>
+                        <input type="number" id="issueNumber" placeholder="Enter issue number">
+                    </div>
+                </div>
+
+                <!-- Tech Stack Configuration -->
+                <div class="config-section">
+                    <h3>Technology Stack
+                        <button id="autoDetectBtn" class="btn btn-small btn-secondary">Auto-Detect</button>
+                    </h3>
+                    <div class="form-group">
+                        <label for="language">Language</label>
+                        <input type="text" id="language" value="Python" placeholder="e.g., Python, JavaScript" list="languageList">
+                        <datalist id="languageList">
+                            <option value="Python">
+                            <option value="JavaScript">
+                            <option value="TypeScript">
+                            <option value="Java">
+                            <option value="C#">
+                            <option value="Go">
+                            <option value="Ruby">
+                            <option value="PHP">
+                        </datalist>
+                    </div>
+                    <div class="form-group">
+                        <label for="framework">Framework</label>
+                        <input type="text" id="framework" placeholder="e.g., FastAPI, React" list="frameworkList">
+                        <datalist id="frameworkList">
+                            <option value="FastAPI">
+                            <option value="Django">
+                            <option value="Flask">
+                            <option value="React">
+                            <option value="Vue.js">
+                            <option value="Angular">
+                            <option value="Express.js">
+                            <option value="Spring Boot">
+                        </datalist>
+                    </div>
+                    <div class="form-group">
+                        <label for="database">Database</label>
+                        <input type="text" id="database" placeholder="e.g., PostgreSQL, MongoDB" list="databaseList">
+                        <datalist id="databaseList">
+                            <option value="PostgreSQL">
+                            <option value="MySQL">
+                            <option value="MongoDB">
+                            <option value="Redis">
+                            <option value="SQLite">
+                            <option value="Oracle">
+                        </datalist>
+                    </div>
+                    <div class="form-group">
+                        <label for="testing">Testing</label>
+                        <input type="text" id="testing" value="pytest" placeholder="e.g., pytest, jest" list="testingList">
+                        <datalist id="testingList">
+                            <option value="pytest">
+                            <option value="unittest">
+                            <option value="jest">
+                            <option value="mocha">
+                            <option value="JUnit">
+                            <option value="NUnit">
+                            <option value="RSpec">
+                        </datalist>
+                    </div>
+                    <div class="form-group">
+                        <label for="deployment">Deployment</label>
+                        <input type="text" id="deployment" placeholder="e.g., Docker, Kubernetes" list="deploymentList">
+                        <datalist id="deploymentList">
+                            <option value="Docker">
+                            <option value="Kubernetes">
+                            <option value="AWS">
+                            <option value="Azure">
+                            <option value="Google Cloud">
+                            <option value="Heroku">
+                            <option value="Vercel">
+                        </datalist>
+                    </div>
+                    <div class="form-group">
+                        <label for="cicd">CI/CD</label>
+                        <input type="text" id="cicd" value="GitLab CI" placeholder="e.g., GitLab CI, GitHub Actions" list="cicdList">
+                        <datalist id="cicdList">
+                            <option value="GitLab CI">
+                            <option value="GitHub Actions">
+                            <option value="Jenkins">
+                            <option value="CircleCI">
+                            <option value="Travis CI">
+                            <option value="Azure DevOps">
+                        </datalist>
+                    </div>
+                </div>
+
+                <!-- LLM Configuration -->
+                <div class="config-section">
+                    <h3>LLM Configuration</h3>
+                    <div class="form-group">
+                        <label for="llmProvider">LLM Provider</label>
+                        <select id="llmProvider">
+                            <option value="">Loading providers...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="llmModel">Model</label>
+                        <select id="llmModel">
+                            <option value="">Select provider first</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="llmTemperature">Temperature</label>
+                        <input type="number" id="llmTemperature" value="0.7" min="0" max="2" step="0.1"
+                               title="Lower values = more focused, higher values = more creative">
+                    </div>
+                </div>
+
+                <!-- Advanced Options -->
+                <div class="config-section">
+                    <h3>Advanced Options</h3>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="autoMerge">
+                            <span>Auto-merge successful MRs</span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="debugMode">
+                            <span>Enable debug output</span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label for="minCoverage">Minimum Test Coverage (%)</label>
+                        <input type="number" id="minCoverage" value="70" min="0" max="100">
+                    </div>
+                </div>
+
+                <!-- Control Buttons -->
+                <div class="control-buttons">
+                    <button id="startBtn" class="btn btn-primary">
+                        <span class="btn-icon">[>]</span> Start System
+                    </button>
+                    <button id="stopBtn" class="btn btn-danger" disabled>
+                        <span class="btn-icon">[X]</span> Stop System
+                    </button>
+                    <button id="clearBtn" class="btn btn-secondary">
+                        <span class="btn-icon">[C]</span> Clear Logs
+                    </button>
+                </div>
+            </section>
+
+            <!-- Monitoring Panel -->
+            <section class="monitoring-panel">
+                <!-- Status Bar -->
+                <div class="status-bar">
+                    <div class="status-item">
+                        <span class="status-label">Status:</span>
+                        <span class="status-value" id="systemStatus">Idle</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Current Stage:</span>
+                        <span class="status-value" id="currentStage">-</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Progress:</span>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressBar"></div>
+                        </div>
+                        <span class="progress-text" id="progressText">0%</span>
+                    </div>
+                </div>
+
+                <!-- Pipeline Visualization -->
+                <div class="pipeline-view">
+                    <h3>Pipeline Status</h3>
+                    <div class="pipeline">
+                        <div class="pipeline-stage" id="stage-planning" data-status="pending">
+                            <div class="stage-icon">[P]</div>
+                            <div class="stage-name">Planning</div>
+                            <div class="stage-status">Pending</div>
+                        </div>
+                        <div class="pipeline-connector">→</div>
+                        <div class="pipeline-stage" id="stage-coding" data-status="pending">
+                            <div class="stage-icon">[C]</div>
+                            <div class="stage-name">Coding</div>
+                            <div class="stage-status">Pending</div>
+                        </div>
+                        <div class="pipeline-connector">→</div>
+                        <div class="pipeline-stage" id="stage-testing" data-status="pending">
+                            <div class="stage-icon">[T]</div>
+                            <div class="stage-name">Testing</div>
+                            <div class="stage-status">Pending</div>
+                        </div>
+                        <div class="pipeline-connector">→</div>
+                        <div class="pipeline-stage" id="stage-review" data-status="pending">
+                            <div class="stage-icon">[R]</div>
+                            <div class="stage-name">Review</div>
+                            <div class="stage-status">Pending</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabs for different views -->
+                <div class="tabs">
+                    <button class="tab-button active" data-tab="agent-output">Agent Output</button>
+                    <button class="tab-button" data-tab="tool-usage">Tool Usage</button>
+                    <button class="tab-button" data-tab="issues">Issues</button>
+                    <button class="tab-button" data-tab="statistics">Statistics</button>
+                </div>
+
+                <!-- Tab Content -->
+                <div class="tab-content">
+                    <!-- Agent Output Tab -->
+                    <div id="agent-output" class="tab-pane active">
+                        <div class="output-container" id="agentOutput">
+                            <div class="output-message">System ready. Configure settings and click 'Start System' to begin.</div>
+                        </div>
+                    </div>
+
+                    <!-- Tool Usage Tab -->
+                    <div id="tool-usage" class="tab-pane">
+                        <div class="tool-list" id="toolList">
+                            <div class="tool-message">No tool usage yet.</div>
+                        </div>
+                    </div>
+
+                    <!-- Issues Tab -->
+                    <div id="issues" class="tab-pane">
+                        <div class="issues-section">
+                            <div class="issues-header">
+                                <h4>Available Issues</h4>
+                                <button id="refreshIssues" class="btn btn-small btn-secondary">Refresh</button>
+                            </div>
+                            <div class="issues-table-container">
+                                <table id="issuesTable" class="issues-table">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Title</th>
+                                            <th>Labels</th>
+                                            <th>State</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="issuesTableBody">
+                                        <tr>
+                                            <td colspan="5" class="text-center">No issues loaded. Select a project first.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Statistics Tab -->
+                    <div id="statistics" class="tab-pane">
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-label">Total Issues</div>
+                                <div class="stat-value" id="statTotalIssues">0</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Processed</div>
+                                <div class="stat-value" id="statProcessed">0</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Success Rate</div>
+                                <div class="stat-value" id="statSuccessRate">0%</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Agent Calls</div>
+                                <div class="stat-value" id="statAgentCalls">0</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Tool Calls</div>
+                                <div class="stat-value" id="statToolCalls">0</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Uptime</div>
+                                <div class="stat-value" id="statUptime">00:00:00</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <span>© 2024 AgenticSys - Autonomous Multi-Agent System</span>
+                <span class="separator">|</span>
+                <a href="https://github.com/your-repo" target="_blank">Documentation</a>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/websocket.js"></script>
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/ui.js"></script>
+    <script src="/static/js/app.js"></script>
+
+    <!-- Temporary: Force LLM Configuration Loading -->
+    <script>
+        console.log('[FORCE] Loading LLM configuration...');
+
+        // Wait for DOM and app to load
+        setTimeout(async function() {
+            try {
+                console.log('[FORCE] Attempting to load LLM providers...');
+
+                // Get LLM provider dropdown
+                const providerSelect = document.getElementById('llmProvider');
+                const modelSelect = document.getElementById('llmModel');
+                const tempInput = document.getElementById('llmTemperature');
+
+                if (!providerSelect) {
+                    console.error('[FORCE] LLM provider element not found!');
+                    return;
+                }
+
+                console.log('[FORCE] Found LLM elements, fetching providers...');
+
+                // Load providers
+                const providersResponse = await fetch('/api/llm/providers');
+                const providersData = await providersResponse.json();
+                console.log('[FORCE] Providers:', providersData);
+
+                // Populate provider dropdown
+                providerSelect.innerHTML = '<option value="">Select provider...</option>';
+                providersData.providers.forEach(provider => {
+                    const option = document.createElement('option');
+                    option.value = provider;
+                    option.textContent = provider.charAt(0).toUpperCase() + provider.slice(1);
+                    if (provider === providersData.default) {
+                        option.selected = true;
+                    }
+                    providerSelect.appendChild(option);
+                });
+
+                // Load models for default provider
+                if (providersData.default) {
+                    const modelsResponse = await fetch(`/api/llm/models/${providersData.default}`);
+                    const modelsData = await modelsResponse.json();
+                    console.log('[FORCE] Models:', modelsData);
+
+                    modelSelect.innerHTML = '<option value="">Select model...</option>';
+                    Object.entries(modelsData.models).forEach(([modelId, modelName]) => {
+                        const option = document.createElement('option');
+                        option.value = modelId;
+                        option.textContent = modelName;
+                        if (modelId === modelsData.default) {
+                            option.selected = true;
+                        }
+                        modelSelect.appendChild(option);
+                    });
+                }
+
+                // Load current config
+                const configResponse = await fetch('/api/llm/current');
+                const configData = await configResponse.json();
+                console.log('[FORCE] Current config:', configData);
+
+                tempInput.value = configData.temperature;
+
+                console.log('[FORCE] LLM configuration loaded successfully!');
+
+                // Add provider change handler
+                providerSelect.addEventListener('change', async function(e) {
+                    const provider = e.target.value;
+                    if (provider) {
+                        console.log('[FORCE] Loading models for:', provider);
+                        const response = await fetch(`/api/llm/models/${provider}`);
+                        const data = await response.json();
+
+                        modelSelect.innerHTML = '<option value="">Select model...</option>';
+                        Object.entries(data.models).forEach(([modelId, modelName]) => {
+                            const option = document.createElement('option');
+                            option.value = modelId;
+                            option.textContent = modelName;
+                            if (modelId === data.default) {
+                                option.selected = true;
+                            }
+                            modelSelect.appendChild(option);
+                        });
+                    }
+                });
+
+            } catch (error) {
+                console.error('[FORCE] Error loading LLM configuration:', error);
+            }
+        }, 2000); // Wait 2 seconds for everything to load
+    </script>
+</body>
+</html>
