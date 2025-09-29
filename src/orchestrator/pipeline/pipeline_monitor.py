@@ -70,10 +70,10 @@ class PipelineMonitor:
             Tuple of (success, status_message, pipeline_summary)
         """
         if specific_pipeline_id:
-            print(f"[PIPELINE MONITOR] 🎯 Monitoring SPECIFIC pipeline #{specific_pipeline_id}")
+            print(f"[PIPELINE MONITOR] Monitoring SPECIFIC pipeline #{specific_pipeline_id}")
         else:
-            print(f"[PIPELINE MONITOR] 🔍 Starting pipeline monitoring for branch: {branch}")
-        print(f"[PIPELINE MONITOR] ⏰ Timeout: {timeout_minutes} minutes, Check interval: {check_interval_seconds}s")
+            print(f"[PIPELINE MONITOR] Starting pipeline monitoring for branch: {branch}")
+        print(f"[PIPELINE MONITOR] Timeout: {timeout_minutes} minutes, Check interval: {check_interval_seconds}s")
 
         start_time = time.time()
         timeout_seconds = timeout_minutes * 60
@@ -112,8 +112,8 @@ class PipelineMonitor:
 
                 # Only print status changes to avoid spam
                 if status != last_status:
-                    print(f"[PIPELINE MONITOR] 📊 Pipeline #{pipeline_id} status: {status}")
-                    print(f"[PIPELINE MONITOR] 🔗 Pipeline URL: {web_url}")
+                    print(f"[PIPELINE MONITOR] Pipeline #{pipeline_id} status: {status}")
+                    print(f"[PIPELINE MONITOR] Pipeline URL: {web_url}")
                     last_status = status
 
                 # Check if pipeline is still running
@@ -123,7 +123,7 @@ class PipelineMonitor:
                     continue
 
                 # Pipeline completed - analyze results
-                print(f"[PIPELINE MONITOR] 🏁 Pipeline completed with status: {status}")
+                print(f"[PIPELINE MONITOR] Pipeline completed with status: {status}")
 
                 if status == 'success':
                     # Verify pipeline actually ran tests
@@ -336,7 +336,7 @@ class PipelineMonitor:
             branch: Branch name
             keep_pipeline_id: Pipeline ID to keep running (all others will be canceled)
         """
-        print(f"[PIPELINE MONITOR] 🚫 Canceling old pipelines for branch: {branch}")
+        print(f"[PIPELINE MONITOR] Canceling old pipelines for branch: {branch}")
 
         try:
             # Get all pipelines for the branch
@@ -384,7 +384,7 @@ class PipelineMonitor:
                             print(f"[PIPELINE MONITOR] ⚠️ Failed to cancel pipeline #{pipeline_id}: {e}")
 
             if canceled_count > 0:
-                print(f"[PIPELINE MONITOR] 🧹 Canceled {canceled_count} old pipeline(s)")
+                print(f"[PIPELINE MONITOR] Canceled {canceled_count} old pipeline(s)")
             else:
                 print(f"[PIPELINE MONITOR] ✅ No old pipelines to cancel")
 
@@ -398,7 +398,7 @@ class PipelineMonitor:
         """
         self.current_pipeline_id = str(pipeline_id)
         self.monitored_pipelines.add(str(pipeline_id))
-        print(f"[PIPELINE MONITOR] 🎯 Now monitoring pipeline #{pipeline_id}")
+        print(f"[PIPELINE MONITOR] Now monitoring pipeline #{pipeline_id}")
 
     def get_current_pipeline(self) -> Optional[str]:
         """Get the current pipeline ID being monitored."""

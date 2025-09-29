@@ -28,7 +28,7 @@ class LLMMenu:
 
     def show_provider_menu(self) -> Optional[Dict[str, str]]:
         """Interactive menu for selecting LLM provider."""
-        self.display.print_section("🤖 LLM PROVIDER CONFIGURATION")
+        self.display.print_section("[LLM] LLM PROVIDER CONFIGURATION")
         print("  Select your preferred Large Language Model provider:")
         print("  (Default provider from .env will be used if skipped)")
         print()
@@ -37,7 +37,7 @@ class LLMMenu:
         available_providers = self.loader.get_available_providers()
         provider_summary = self.loader.get_provider_summary()
 
-        print("🤖 AVAILABLE PROVIDERS:")
+        print("[LLM] AVAILABLE PROVIDERS:")
         provider_options = []
 
         option_num = 1

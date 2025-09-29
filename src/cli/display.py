@@ -74,7 +74,7 @@ class Display:
     @staticmethod
     def print_configuration_summary(config: Dict[str, Any]):
         """Print configuration summary."""
-        Display.print_header("📋 CONFIGURATION SUMMARY")
+        Display.print_header("[CONFIG] CONFIGURATION SUMMARY")
 
         print(f"Project ID: {config.get('project_id', 'Not set')}")
 

@@ -16,7 +16,18 @@
       "Bash(git commit:*)",
       "Bash(tree:*)",
       "Bash(mkdir:*)",
-      "Bash(xargs git status:*)"
+      "Bash(xargs git status:*)",
+      "Bash(dir:*)",
+      "Read(//c/**)",
+      "Bash(findstr:*)",
+      "Bash(curl:*)",
+      "Bash(timeout:*)",
+      "Bash(netstat:*)",
+      "Bash(taskkill:*)",
+      "Bash(del test_mcp_projects.py test_api_projects.py)",
+      "Bash(start http://localhost:8000)",
+      "Bash(/bashes)",
+      "Bash(cd:*)"
     ],
     "deny": [],
     "ask": []

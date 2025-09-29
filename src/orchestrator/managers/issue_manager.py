@@ -24,6 +24,10 @@ class IssueManager:
         self.completed_issues = []
         self.failed_issues = []
 
+        # Current issue being processed
+        self.current_issue_number = None
+        self.current_issue_title = None
+
         # Retry configuration
         self.max_retries = 3
         self.retry_delay = 5
@@ -70,20 +74,20 @@ class IssueManager:
                 try:
                     issues = json.loads(response)
                     if isinstance(issues, list):
-                        print(f"[MCP] ✅ Fetched {len(issues)} issues")
+                        print(f"[MCP] Fetched {len(issues)} issues")
                         self.gitlab_issues = issues
                         return issues
                 except json.JSONDecodeError:
-                    print("[MCP] ⚠️ Could not parse issues response")
+                    print("[MCP] Could not parse issues response")
             elif isinstance(response, list):
-                print(f"[MCP] ✅ Fetched {len(response)} issues")
+                print(f"[MCP] Fetched {len(response)} issues")
                 self.gitlab_issues = response
                 return response
 
             return []
 
         except Exception as e:
-            print(f"[MCP] ❌ Failed to fetch issues: {e}")
+            print(f"[MCP] Failed to fetch issues: {e}")
             return []
 
     async def is_issue_completed(self, issue: Dict[str, Any]) -> bool:

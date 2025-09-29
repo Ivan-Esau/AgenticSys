@@ -15,7 +15,7 @@ class MenuSystem:
 
     def show_main_menu(self) -> Optional[Dict[str, Any]]:
         """Full interactive menu for the entire GitLab Agent System."""
-        self.display.print_header("🚀 GITLAB AGENT SYSTEM - INTERACTIVE MODE")
+        self.display.print_header("[SYSTEM] GITLAB AGENT SYSTEM - INTERACTIVE MODE")
         print("Welcome! Let's configure your project automation.")
         print()
 
@@ -53,7 +53,7 @@ class MenuSystem:
 
         self.display.print_configuration_summary(config)
 
-        if not self.display.prompt_yes_no("\n🚀 Start execution with this configuration?"):
+        if not self.display.prompt_yes_no("\n[START] Start execution with this configuration?"):
             self.display.print_error("Configuration cancelled. Exiting...")
             return None
 
@@ -129,7 +129,7 @@ class MenuSystem:
 
     def _get_tech_stack(self) -> Optional[Dict[str, str]]:
         """Get tech stack configuration."""
-        self.display.print_section("🔧 TECH STACK CONFIGURATION")
+        self.display.print_section("[TECH] TECH STACK CONFIGURATION")
         print("  Do you want to specify technologies for new/empty projects?")
         print("  (Existing projects will auto-detect their technology stack)")
 
@@ -177,7 +177,7 @@ class MenuSystem:
             tech_stack["database"] = database
 
         if tech_stack:
-            print(f"\n✅ TECH STACK CONFIGURED:")
+            print(f"\n[OK] TECH STACK CONFIGURED:")
             for key, value in tech_stack.items():
                 print(f"   {key.title()}: {value}")
 
@@ -198,7 +198,7 @@ class MenuSystem:
             ("6", "Other/Skip", None)
         ]
 
-        self.display.print_section("🔧 BACKEND LANGUAGE")
+        self.display.print_section("[TECH] BACKEND LANGUAGE")
         for option, desc, _ in backend_options:
             self.display.print_option(option, desc)
 

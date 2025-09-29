@@ -55,7 +55,7 @@ class AgentExecutor:
 
             # Check if this is a network failure that should be retried
             if CompletionMarkers.should_retry_pipeline(result):
-                print(f"[AGENT EXECUTOR] 🔄 Network failure - pipeline retry recommended")
+                print(f"[AGENT EXECUTOR] Network failure - pipeline retry recommended")
 
             # Pipeline failure means task failed
             return False, 0.0
@@ -110,8 +110,8 @@ class AgentExecutor:
         execution_id = self._start_execution_tracking("planning", {"apply": apply})
         
         try:
-            print("\n[AGENT EXECUTOR] 🎯 Executing Planning Agent...")
-            print(f"[AGENT EXECUTOR] 📋 Mode: {'Implementation' if apply else 'Analysis'}")
+            print("\n[AGENT EXECUTOR] Executing Planning Agent...")
+            print(f"[AGENT EXECUTOR] Mode: {'Implementation' if apply else 'Analysis'}")
             
             # Execute planning agent with timeout protection
             result = await asyncio.wait_for(
@@ -126,36 +126,36 @@ class AgentExecutor:
             )
             
             if not result:
-                print("[AGENT EXECUTOR] ⚠️ Planning agent returned empty result")
+                print("[AGENT EXECUTOR] WARNING: Planning agent returned empty result")
                 self._end_execution_tracking(execution_id, "failed", "Empty result")
                 return False
             
-            print(f"[AGENT EXECUTOR] 📊 Planning agent completed ({len(result)} chars)")
+            print(f"[AGENT EXECUTOR] Planning agent completed ({len(result)} chars)")
             
             # Process and validate result with enhanced logging
             success = await self._process_planning_result(result)
             
             if success:
-                print("[AGENT EXECUTOR] ✅ Planning agent execution successful")
+                print("[AGENT EXECUTOR] Planning agent execution successful")
             else:
-                print("[AGENT EXECUTOR] ❌ Planning agent validation failed")
+                print("[AGENT EXECUTOR] Planning agent validation failed")
             
             self._end_execution_tracking(execution_id, "success" if success else "failed")
             return success
             
         except asyncio.TimeoutError:
-            print("[AGENT EXECUTOR] ⏰ Planning agent timed out (10min limit)")
+            print("[AGENT EXECUTOR] Planning agent timed out (10min limit)")
             self._end_execution_tracking(execution_id, "timeout", "Execution timeout")
             return False
             
         except Exception as e:
-            print(f"[AGENT EXECUTOR] ❌ Planning agent failed: {e}")
-            print(f"[AGENT EXECUTOR] 🔍 Error type: {type(e).__name__}")
+            print(f"[AGENT EXECUTOR] Planning agent failed: {e}")
+            print(f"[AGENT EXECUTOR] Error type: {type(e).__name__}")
             # Add more debug info for troubleshooting
             import traceback
             if "tool decorator" in str(e):
-                print("[AGENT EXECUTOR] 🔧 Tool compatibility issue detected")
-                print("[AGENT EXECUTOR] 📝 This may be due to MCP tool format incompatibility")
+                print("[AGENT EXECUTOR] Tool compatibility issue detected")
+                print("[AGENT EXECUTOR] This may be due to MCP tool format incompatibility")
             self._end_execution_tracking(execution_id, "error", str(e))
             return False
     
@@ -171,7 +171,7 @@ class AgentExecutor:
         execution_id = self._start_execution_tracking("coding", {"issue_id": issue.get("iid"), "branch": branch})
         
         try:
-            print(f"\n[AGENT EXECUTOR] 💻 Executing Coding Agent for Issue #{issue.get('iid')}...")
+            print(f"\n[AGENT EXECUTOR] Executing Coding Agent for Issue #{issue.get('iid')}...")
             
             # Execute coding agent
             result = await coding_agent.run(
@@ -207,7 +207,7 @@ class AgentExecutor:
         execution_id = self._start_execution_tracking("testing", {"issue_id": issue.get("iid"), "branch": branch})
         
         try:
-            print(f"\n[AGENT EXECUTOR] 🧪 Executing Testing Agent for Issue #{issue.get('iid')}...")
+            print(f"\n[AGENT EXECUTOR] Executing Testing Agent for Issue #{issue.get('iid')}...")
             
             # Execute testing agent
             result = await testing_agent.run(
@@ -227,7 +227,7 @@ class AgentExecutor:
                 pipeline_id = self._extract_pipeline_id(result)
                 if pipeline_id:
                     self.testing_pipeline_id = pipeline_id
-                    print(f"[AGENT EXECUTOR] 📌 Stored Testing Agent pipeline: #{pipeline_id}")
+                    print(f"[AGENT EXECUTOR] Stored Testing Agent pipeline: #{pipeline_id}")
 
             self._end_execution_tracking(execution_id, "success" if success else "failed")
             return success
@@ -249,7 +249,7 @@ class AgentExecutor:
         execution_id = self._start_execution_tracking("review", {"issue_id": issue.get("iid"), "branch": branch})
         
         try:
-            print(f"\n[AGENT EXECUTOR] 👀 Executing Review Agent for Issue #{issue.get('iid')}...")
+            print(f"\n[AGENT EXECUTOR] Executing Review Agent for Issue #{issue.get('iid')}...")
             
             # Execute review agent
             result = await review_agent.run(
@@ -269,7 +269,7 @@ class AgentExecutor:
                 pipeline_id = self._extract_pipeline_id(result)
                 if pipeline_id:
                     self.current_pipeline_id = pipeline_id
-                    print(f"[AGENT EXECUTOR] 📌 Review Agent monitoring pipeline: #{pipeline_id}")
+                    print(f"[AGENT EXECUTOR] Review Agent monitoring pipeline: #{pipeline_id}")
 
                     # Validate it matches Testing Agent's pipeline
                     if self.testing_pipeline_id and pipeline_id != self.testing_pipeline_id:
@@ -325,12 +325,12 @@ class AgentExecutor:
             print("[AGENT EXECUTOR] ❌ No result from planning agent")
             return False
         
-        print(f"[AGENT EXECUTOR] 🔍 Analyzing planning agent output...")
+        print(f"[AGENT EXECUTOR] Analyzing planning agent output...")
         
         # Check for success using simple detection
         success, confidence = self._check_agent_success("planning", result)
         
-        print(f"[AGENT EXECUTOR] 📊 Detection Results:")
+        print(f"[AGENT EXECUTOR] Detection Results:")
         print(f"  - Success: {success}")
         print(f"  - Confidence: {confidence:.2%}")
         
@@ -341,7 +341,7 @@ class AgentExecutor:
             # Store the planning analysis result for supervisor use
             if result and not self.current_plan:
                 self.current_plan = result  # Store the full planning analysis text
-                print("[AGENT EXECUTOR] 📋 Stored planning analysis for issue prioritization")
+                print("[AGENT EXECUTOR] Stored planning analysis for issue prioritization")
 
             print("[AGENT EXECUTOR] ✅ Planning agent execution successful")
             return True
@@ -359,12 +359,12 @@ class AgentExecutor:
                 print(f"[AGENT EXECUTOR] ⚠️ JSON extraction fallback failed: {e}")
         
         print(f"[AGENT EXECUTOR] ❌ Planning validation failed")
-        print(f"[AGENT EXECUTOR] 📄 Agent output length: {len(result)} chars")
+        print(f"[AGENT EXECUTOR] Agent output length: {len(result)} chars")
         
         # Diagnostic info for debugging
         if len(result) < 200:
             print("[AGENT EXECUTOR] ⚠️ Suspiciously short output - possible tool execution failure")
-            print(f"[AGENT EXECUTOR] 📋 Output preview: {repr(result[:100])}")
+            print(f"[AGENT EXECUTOR] Output preview: {repr(result[:100])}")
         
         return False
     
@@ -395,7 +395,7 @@ class AgentExecutor:
     
     def _trigger_supervisor_feedback(self, agent_type: str, failure_message: str, issue_id: str, context: dict = None):
         """Trigger supervisor feedback for agent failures."""
-        print(f"[AGENT EXECUTOR] 📤 Triggering supervisor feedback for {agent_type} agent failure on issue #{issue_id}")
+        print(f"[AGENT EXECUTOR] Triggering supervisor feedback for {agent_type} agent failure on issue #{issue_id}")
         # This would integrate with supervisor's feedback system
         # For now, just log the failure for supervisor to handle
         

@@ -239,7 +239,7 @@ class PipelineManager:
                 elif status == "failed":
                     print(f"[PIPELINE] ❌ Pipeline failed - review needed")
                 elif status == "running":
-                    print(f"[PIPELINE] 🔄 Pipeline still running")
+                    print(f"[PIPELINE] Pipeline still running")
                 else:
                     print(f"[PIPELINE] Status: {status}")
 

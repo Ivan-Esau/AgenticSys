@@ -85,7 +85,7 @@ class Supervisor:
             self.executor.pipeline_config = self.pipeline_manager.pipeline_config
 
         except Exception as e:
-            print(f"[SUPERVISOR] ❌ Initialization failed: {e}")
+            print(f"[SUPERVISOR] Initialization failed: {e}")
             raise
 
     async def route_task(self, task_type: str, **kwargs) -> Any:
@@ -102,8 +102,8 @@ class Supervisor:
         timing_id = self.performance_tracker.start_task_timing(routing_result["agent"], task_type)
 
         try:
-            print(f"\n[SUPERVISOR] 🎯 Delegating {task_type.upper()} task to {routing_result['agent']} agent...")
-            print(f"[SUPERVISOR] 🤝 Agent handoff initiated...")
+            print(f"\n[SUPERVISOR] Delegating {task_type.upper()} task to {routing_result['agent']} agent...")
+            print(f"[SUPERVISOR] Agent handoff initiated...")
 
             # Route to appropriate executor method
             result = None
@@ -113,28 +113,28 @@ class Supervisor:
                     print(f"[SUPERVISOR] ✅ Planning agent handoff complete - plan acquired")
                     self.planning_manager.store_plan(result)
                 else:
-                    print(f"[SUPERVISOR] ❌ Planning agent handoff failed")
+                    print(f"[SUPERVISOR] Planning agent handoff failed")
 
             elif task_type == "coding":
                 result = await self.executor.execute_coding_agent(**kwargs)
                 if result:
                     print(f"[SUPERVISOR] ✅ Coding agent handoff complete")
                 else:
-                    print(f"[SUPERVISOR] ❌ Coding agent handoff failed")
+                    print(f"[SUPERVISOR] Coding agent handoff failed")
 
             elif task_type == "testing":
                 result = await self.executor.execute_testing_agent(**kwargs)
                 if result:
                     print(f"[SUPERVISOR] ✅ Testing agent handoff complete")
                 else:
-                    print(f"[SUPERVISOR] ❌ Testing agent handoff failed")
+                    print(f"[SUPERVISOR] Testing agent handoff failed")
 
             elif task_type == "review":
                 result = await self.executor.execute_review_agent(**kwargs)
                 if result:
                     print(f"[SUPERVISOR] ✅ Review agent handoff complete")
                 else:
-                    print(f"[SUPERVISOR] ❌ Review agent handoff failed")
+                    print(f"[SUPERVISOR] Review agent handoff failed")
 
             # End performance tracking
             self.performance_tracker.end_task_timing(timing_id, success=bool(result))
@@ -143,7 +143,7 @@ class Supervisor:
             self.router.complete_task(routing_result["agent"], success=bool(result))
 
             if result:
-                print(f"[SUPERVISOR] 🎉 {task_type.upper()} task completed successfully")
+                print(f"[SUPERVISOR] {task_type.upper()} task completed successfully")
             else:
                 print(f"[SUPERVISOR] ⚠️ {task_type.upper()} task completed with issues")
 
@@ -157,7 +157,7 @@ class Supervisor:
             self.router.complete_task(routing_result["agent"], success=False)
 
             print(f"[ERROR] {routing_result['agent']}: {e}")
-            print(f"[SUPERVISOR] ❌ Agent coordination failed: {e}")
+            print(f"[SUPERVISOR] Agent coordination failed: {e}")
             raise Exception(f"Task {task_type} failed: {e}")
 
     async def implement_issue(self, issue: Dict, max_retries: int = None) -> bool:
@@ -196,7 +196,7 @@ class Supervisor:
                 )
 
                 if not coding_result:
-                    print(f"[ISSUE #{issue_id}] ❌ Coding phase failed")
+                    print(f"[ISSUE #{issue_id}] Coding phase failed")
                     continue  # Retry the whole issue
 
                 # Phase 2: Testing
@@ -232,7 +232,7 @@ class Supervisor:
                     return True  # Success!
 
             except Exception as e:
-                print(f"[ISSUE #{issue_id}] ❌ Implementation failed: {e}")
+                print(f"[ISSUE #{issue_id}] Implementation failed: {e}")
                 if attempt < retries - 1:
                     continue  # Retry
                 return False  # Final failure
@@ -245,7 +245,7 @@ class Supervisor:
         Main execution flow using modular components.
         """
         print(f"\n{'='*70}")
-        print(f"🚀 GITLAB AGENT SYSTEM - REFACTORED ORCHESTRATION")
+        print(f"GITLAB AGENT SYSTEM - REFACTORED ORCHESTRATION")
         print(f"{'='*70}")
         print(f"Project: {self.project_id}")
         print(f"Mode: {mode}")
@@ -259,7 +259,7 @@ class Supervisor:
             self.state = ExecutionState.INITIALIZING
             await self.initialize()
         except Exception as e:
-            print(f"[SUPERVISOR] ❌ Initialization failed: {e}")
+            print(f"[SUPERVISOR] Initialization failed: {e}")
             self.state = ExecutionState.FAILED
             return
 
@@ -393,7 +393,7 @@ class Supervisor:
             print("\n⚠️ ORCHESTRATION COMPLETED WITH SOME FAILURES")
         else:
             self.state = ExecutionState.FAILED
-            print("\n❌ ORCHESTRATION FAILED")
+            print("\nORCHESTRATION FAILED")
 
         # Clean up
         await self.cleanup()
@@ -408,11 +408,11 @@ class Supervisor:
         stats = self.issue_manager.get_summary_stats()
 
         if stats['total_processed'] > 0:
-            print(f"\n📊 ISSUE IMPLEMENTATION:")
+            print(f"\nISSUE IMPLEMENTATION:")
             print(f"  Total Processed: {stats['total_processed']}")
             print(f"  ✅ Completed: {stats['completed']}")
-            print(f"  ❌ Failed: {stats['failed']}")
-            print(f"  📈 Success Rate: {stats['success_rate']:.1f}%")
+            print(f"  Failed: {stats['failed']}")
+            print(f"  Success Rate: {stats['success_rate']:.1f}%")
 
             if stats['completed_issues']:
                 print(f"\n✅ Completed Issues:")
@@ -420,7 +420,7 @@ class Supervisor:
                     print(f"    - #{issue.get('iid')}: {issue.get('title', 'Unknown')}")
 
             if stats['failed_issues']:
-                print(f"\n❌ Failed Issues:")
+                print(f"\nFailed Issues:")
                 for issue in stats['failed_issues']:
                     print(f"    - #{issue.get('iid')}: {issue.get('title', 'Unknown')}")
 
