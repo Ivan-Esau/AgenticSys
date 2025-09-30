@@ -1,6 +1,6 @@
 """
-Centralized pipeline configuration management.
-Eliminates hardcoded CI/CD references and provides dynamic configuration.
+Modern 5-stage pipeline configuration based on CI/CD best practices.
+Implements consistent structure across tech stacks for research comparability.
 """
 
 from typing import Dict, List, Optional, Any
@@ -9,647 +9,605 @@ import json
 
 
 class PipelineConfig:
-    """Centralized configuration for CI/CD pipelines."""
-    
+    """Modern 5-stage pipeline configuration for research comparability."""
+
+    # Standard stages for all pipelines (consistency for research)
+    STANDARD_STAGES = ['validate', 'build', 'test', 'analyze', 'deploy']
+
     def __init__(self, tech_stack: Optional[Dict[str, str]] = None):
         """
-        Initialize pipeline configuration based on tech stack.
+        Initialize pipeline configuration with modern 5-stage structure.
 
         Args:
-            tech_stack: Dict with 'backend', 'frontend', and optional 'min_coverage' keys
+            tech_stack: Dict with 'backend', 'frontend', 'min_coverage', etc.
         """
         self.tech_stack = tech_stack or {}
         self.backend = self.tech_stack.get('backend', 'python')
         self.frontend = self.tech_stack.get('frontend', 'none')
         self.min_coverage = self.tech_stack.get('min_coverage', 70)
+        self.enable_security = self.tech_stack.get('enable_security', True)
+        self.enable_quality = self.tech_stack.get('enable_quality', True)
 
         # Load configuration based on tech stack
         self.config = self._load_stack_config()
-    
+
     def _load_stack_config(self) -> Dict[str, Any]:
-        """Load configuration based on detected tech stack."""
+        """Load modern pipeline configuration based on tech stack."""
+
+        # Base configuration (same for all tech stacks for research consistency)
         config = {
             'pipeline_file': '.gitlab-ci.yml',
-            'stages': ['test', 'build'],
-            'cache_paths': [],
-            'artifacts': {},
-            'variables': {},
-            'before_script': [],
-            'test_commands': [],
-            'build_commands': [],
-            'docker_image': None,
-            'test_framework': None,
-            'package_manager': None,
-            'requirements_file': None,
-            'test_directory': 'tests',
-            'source_directory': 'src',
-            'coverage_tool': None,
-            'min_coverage': self.min_coverage
+            'stages': self.STANDARD_STAGES,
+            'cache_strategy': 'pull-push',
+            'interruptible': True,  # Allow canceling outdated pipelines
+            'default_retry': {
+                'max': 2,
+                'when': ['network_failure', 'runner_system_failure']
+            }
         }
-        
-        # Python configuration
+
+        # Tech-stack specific configuration
         if self.backend == 'python':
-            config.update({
-                'docker_image': 'python:3.11-slim',
-                'test_framework': 'pytest',
-                'package_manager': 'pip',
-                'requirements_file': 'requirements.txt',
-                'coverage_tool': 'pytest-cov',
-                'cache_paths': ['.cache/pip/', 'venv/'],
-                'variables': {
-                    'PIP_CACHE_DIR': "$CI_PROJECT_DIR/.cache/pip"
-                },
-                'before_script': [
-                    'python --version',
-                    'python -m pip install --upgrade pip',
-                    'pip install virtualenv',
-                    'virtualenv venv',
-                    'source venv/bin/activate'
-                ],
-                'test_commands': [
-                    'pip install pytest pytest-cov',
-                    'if [ -f requirements.txt ]; then pip install -r requirements.txt; fi',
-                    'python -m pytest tests/ -v --cov=src --cov-report=term-missing --cov-report=xml',
-                    '# Show coverage summary',
-                    'echo "=== Coverage Results ==="',
-                    'if [ -f coverage.xml ]; then echo "Coverage report generated at coverage.xml"; fi'
-                ],
-                'build_commands': [
-                    'python -m py_compile src/**/*.py || true',
-                    'python -m compileall src/ -q || true'
-                ]
-            })
-        
-        # JavaScript/Node configuration
-        elif self.backend in ['javascript', 'nodejs', 'node']:
-            config.update({
-                'docker_image': 'node:18-alpine',
-                'test_framework': 'jest',
-                'package_manager': 'npm',
-                'requirements_file': 'package.json',
-                'coverage_tool': 'jest',
-                'cache_paths': ['node_modules/', '.npm/'],
-                'variables': {
-                    'NPM_CONFIG_CACHE': "$CI_PROJECT_DIR/.npm"
-                },
-                'before_script': [
-                    'node --version',
-                    'npm --version',
-                    'npm ci || npm install'
-                ],
-                'test_commands': [
-                    'npm test -- --coverage --watchAll=false',
-                    '# Show coverage summary',
-                    'echo "=== Coverage Results ==="',
-                    'if [ -f coverage/coverage-summary.json ]; then echo "Coverage report generated at coverage/"; fi'
-                ],
-                'build_commands': [
-                    'npm run build || echo "No build script defined"'
-                ]
-            })
-        
-        # Java configuration - ENHANCED for Spring Boot with JUnit 5
+            config.update(self._python_config())
         elif self.backend == 'java':
-            config.update({
-                'docker_image': 'maven:3.9-eclipse-temurin-21',  # Latest stable Maven with Java 21
-                'test_framework': 'junit5',  # Using JUnit 5 (Jupiter)
-                'package_manager': 'maven',
-                'requirements_file': 'pom.xml',
-                'coverage_tool': 'jacoco',  # Use JaCoCo for code coverage
-                'cache_paths': ['.m2/repository'],  # Cache Maven dependencies
-                'variables': {
-                    'MAVEN_OPTS': '-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository',
-                    'MAVEN_CLI_OPTS': '--batch-mode --errors --fail-at-end --show-version'
-                },
-                'before_script': [
-                    'java -version',
-                    'mvn --version',
-                    '# Ensure Maven settings for reliability',
-                    'mkdir -p ~/.m2',
-                    'echo "<?xml version=\\"1.0\\"?><settings><localRepository>${user.home}/.m2/repository</localRepository></settings>" > ~/.m2/settings.xml'
-                ],
-                'test_commands': [
-                    # Real test execution with JUnit 5 and JaCoCo coverage
-                    'mvn clean test jacoco:report ${MAVEN_CLI_OPTS}',
-                    '# Show test results for pipeline monitoring',
-                    'echo "=== Test Results ==="',
-                    'find target/surefire-reports -name "*.txt" -exec echo {} \\; -exec head -20 {} \\; || echo "No test reports found"',
-                    '# Show coverage summary',
-                    'echo "=== Coverage Results ==="',
-                    'if [ -f target/site/jacoco/index.html ]; then echo "Coverage report generated at target/site/jacoco/index.html"; fi'
-                ],
-                'build_commands': [
-                    # Real build - will fail if compilation fails
-                    'mvn compile ${MAVEN_CLI_OPTS}'
-                ],
-                # Spring Boot specific configuration
-                'spring_boot': {
-                    'parent_version': '3.2.0',
-                    'java_version': '21',
-                    'test_annotations': ['@SpringBootTest', '@WebMvcTest', '@DataJpaTest'],
-                    'package_structure': 'com.example'
-                }
-            })
-        
-        # Go configuration
+            config.update(self._java_config())
+        elif self.backend in ['javascript', 'node', 'nodejs']:
+            config.update(self._nodejs_config())
         elif self.backend == 'go':
-            config.update({
-                'docker_image': 'golang:1.20-alpine',
-                'test_framework': 'go test',
-                'package_manager': 'go mod',
-                'requirements_file': 'go.mod',
-                'coverage_tool': 'go test',
-                'cache_paths': ['vendor/', '.go/'],
-                'variables': {
-                    'GOPATH': "$CI_PROJECT_DIR/.go"
-                },
-                'before_script': [
-                    'go version',
-                    'go mod download || true'
-                ],
-                'test_commands': [
-                    'go test -v -coverprofile=coverage.out -covermode=atomic ./...',
-                    '# Show coverage summary',
-                    'echo "=== Coverage Results ==="',
-                    'go tool cover -func=coverage.out || echo "No coverage data found"'
-                ],
-                'build_commands': [
-                    'go build -v ./...'
-                ]
-            })
-        
-        # Rust configuration
+            config.update(self._go_config())
         elif self.backend == 'rust':
-            config.update({
-                'docker_image': 'rust:latest',
-                'test_framework': 'cargo test',
-                'package_manager': 'cargo',
-                'requirements_file': 'Cargo.toml',
-                'coverage_tool': 'tarpaulin',
-                'cache_paths': ['target/', '.cargo/'],
-                'variables': {
-                    'CARGO_HOME': "$CI_PROJECT_DIR/.cargo"
-                },
-                'before_script': [
-                    'rustc --version',
-                    'cargo --version'
-                ],
-                'test_commands': [
-                    'cargo install cargo-tarpaulin || echo "Installing tarpaulin"',
-                    'cargo tarpaulin --out Xml --output-dir coverage --verbose',
-                    '# Show coverage summary',
-                    'echo "=== Coverage Results ==="',
-                    'if [ -f coverage/cobertura.xml ]; then echo "Coverage report generated at coverage/cobertura.xml"; fi'
-                ],
-                'build_commands': [
-                    'cargo build --release'
-                ]
-            })
-        
+            config.update(self._rust_config())
+        else:
+            config.update(self._default_config())
+
         return config
-    
+
+    def _python_config(self) -> Dict[str, Any]:
+        """Python-specific pipeline configuration."""
+        return {
+            'docker_image': 'python:3.11-slim',
+            'variables': {
+                'PIP_CACHE_DIR': '$CI_PROJECT_DIR/.cache/pip',
+                'PYTHONPATH': '$CI_PROJECT_DIR'
+            },
+            'cache': {
+                'key': '${CI_JOB_NAME}-${CI_COMMIT_REF_SLUG}',
+                'paths': ['.cache/pip', 'venv/']
+            },
+            'jobs': {
+                'validate:lint': {
+                    'stage': 'validate',
+                    'script': [
+                        'pip install --quiet flake8 black mypy',
+                        'flake8 src/ --count --show-source --statistics',
+                        'black --check src/',
+                        'mypy src/ --ignore-missing-imports'
+                    ],
+                    'allow_failure': False
+                },
+                'validate:dependencies': {
+                    'stage': 'validate',
+                    'script': [
+                        'pip install --quiet pip-audit',
+                        'pip-audit --desc'
+                    ],
+                    'allow_failure': True
+                },
+                'build:package': {
+                    'stage': 'build',
+                    'script': [
+                        'pip install --quiet build wheel setuptools',
+                        'python -m build'
+                    ],
+                    'artifacts': {
+                        'paths': ['dist/'],
+                        'expire_in': '1 week'
+                    }
+                },
+                'test:unit': {
+                    'stage': 'test',
+                    'script': [
+                        'pip install --quiet pytest pytest-cov pytest-html',
+                        f'pytest --cov=src --cov-report=xml --cov-report=html --cov-report=term --cov-fail-under={self.min_coverage}'
+                    ],
+                    'coverage': '/TOTAL.*\\s+(\\d+)%/',
+                    'artifacts': {
+                        'reports': {
+                            'junit': 'report.xml',
+                            'coverage_report': {
+                                'coverage_format': 'cobertura',
+                                'path': 'coverage.xml'
+                            }
+                        },
+                        'paths': ['htmlcov/'],
+                        'expire_in': '30 days'
+                    }
+                },
+                'analyze:security': {
+                    'stage': 'analyze',
+                    'script': [
+                        'pip install --quiet bandit safety',
+                        'bandit -r src/ -f json -o bandit-report.json',
+                        'safety check --json > safety-report.json || true'
+                    ],
+                    'artifacts': {
+                        'paths': ['*-report.json'],
+                        'expire_in': '30 days'
+                    },
+                    'allow_failure': True
+                },
+                'analyze:quality': {
+                    'stage': 'analyze',
+                    'script': [
+                        'pip install --quiet radon',
+                        'radon cc src/ -s -j > complexity-report.json',
+                        'radon mi src/ -s -j > maintainability-report.json'
+                    ],
+                    'artifacts': {
+                        'paths': ['*-report.json'],
+                        'expire_in': '30 days'
+                    }
+                }
+            }
+        }
+
+    def _java_config(self) -> Dict[str, Any]:
+        """Java-specific pipeline configuration."""
+        return {
+            'docker_image': 'maven:3.9-eclipse-temurin-21',
+            'variables': {
+                'MAVEN_OPTS': '-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository',
+                'MAVEN_CLI_OPTS': '--batch-mode --errors --fail-at-end --show-version'
+            },
+            'cache': {
+                'key': '${CI_JOB_NAME}-${CI_COMMIT_REF_SLUG}',
+                'paths': ['.m2/repository/', 'target/']
+            },
+            'jobs': {
+                'validate:lint': {
+                    'stage': 'validate',
+                    'script': [
+                        'mvn $MAVEN_CLI_OPTS checkstyle:check',
+                        'mvn $MAVEN_CLI_OPTS spotbugs:check'
+                    ],
+                    'allow_failure': False
+                },
+                'build:compile': {
+                    'stage': 'build',
+                    'script': [
+                        'mvn $MAVEN_CLI_OPTS clean compile'
+                    ],
+                    'artifacts': {
+                        'paths': ['target/classes/'],
+                        'expire_in': '1 week'
+                    }
+                },
+                'test:unit': {
+                    'stage': 'test',
+                    'needs': ['build:compile'],
+                    'script': [
+                        f'mvn $MAVEN_CLI_OPTS test jacoco:report -Djacoco.minimum.coverage={self.min_coverage/100}'
+                    ],
+                    'coverage': '/Total.*?([0-9]{1,3})%/',
+                    'artifacts': {
+                        'reports': {
+                            'junit': 'target/surefire-reports/TEST-*.xml',
+                            'coverage_report': {
+                                'coverage_format': 'cobertura',
+                                'path': 'target/site/jacoco/jacoco.xml'
+                            }
+                        },
+                        'paths': ['target/site/jacoco/'],
+                        'expire_in': '30 days'
+                    }
+                },
+                'test:integration': {
+                    'stage': 'test',
+                    'needs': ['build:compile'],
+                    'script': [
+                        'mvn $MAVEN_CLI_OPTS verify -DskipUnitTests'
+                    ],
+                    'allow_failure': True
+                },
+                'analyze:security': {
+                    'stage': 'analyze',
+                    'script': [
+                        'mvn $MAVEN_CLI_OPTS dependency-check:check'
+                    ],
+                    'artifacts': {
+                        'paths': ['target/dependency-check-report.html'],
+                        'expire_in': '30 days'
+                    },
+                    'allow_failure': True
+                },
+                'analyze:quality': {
+                    'stage': 'analyze',
+                    'script': [
+                        'mvn $MAVEN_CLI_OPTS sonar:sonar -Dsonar.projectKey=$CI_PROJECT_PATH_SLUG || true'
+                    ],
+                    'allow_failure': True
+                }
+            }
+        }
+
+    def _nodejs_config(self) -> Dict[str, Any]:
+        """Node.js-specific pipeline configuration."""
+        return {
+            'docker_image': 'node:20-alpine',
+            'variables': {
+                'NPM_CONFIG_CACHE': '$CI_PROJECT_DIR/.npm'
+            },
+            'cache': {
+                'key': '${CI_JOB_NAME}-${CI_COMMIT_REF_SLUG}',
+                'paths': ['.npm/', 'node_modules/']
+            },
+            'jobs': {
+                'validate:lint': {
+                    'stage': 'validate',
+                    'script': [
+                        'npm ci --silent',
+                        'npm run lint || npx eslint src/',
+                        'npm run prettier:check || npx prettier --check "src/**/*.{js,jsx,ts,tsx}"'
+                    ],
+                    'allow_failure': False
+                },
+                'validate:audit': {
+                    'stage': 'validate',
+                    'script': [
+                        'npm audit --audit-level=moderate'
+                    ],
+                    'allow_failure': True
+                },
+                'build:compile': {
+                    'stage': 'build',
+                    'script': [
+                        'npm ci --silent',
+                        'npm run build || npm run compile || echo "No build step defined"'
+                    ],
+                    'artifacts': {
+                        'paths': ['dist/', 'build/'],
+                        'expire_in': '1 week'
+                    }
+                },
+                'test:unit': {
+                    'stage': 'test',
+                    'script': [
+                        'npm ci --silent',
+                        f'npm run test:coverage || npx jest --coverage --coverageThreshold=\'{{"global":{{"lines":{self.min_coverage}}}}}\''
+                    ],
+                    'coverage': '/Lines\\s*:\\s*(\\d+\\.\\d+)%/',
+                    'artifacts': {
+                        'reports': {
+                            'junit': 'junit.xml',
+                            'coverage_report': {
+                                'coverage_format': 'cobertura',
+                                'path': 'coverage/cobertura-coverage.xml'
+                            }
+                        },
+                        'paths': ['coverage/'],
+                        'expire_in': '30 days'
+                    }
+                },
+                'analyze:quality': {
+                    'stage': 'analyze',
+                    'script': [
+                        'npm ci --silent',
+                        'npx jscpd src/ --min-tokens 50 --reporters "json" --output jscpd-report.json'
+                    ],
+                    'artifacts': {
+                        'paths': ['*-report.json'],
+                        'expire_in': '30 days'
+                    },
+                    'allow_failure': True
+                }
+            }
+        }
+
+    def _go_config(self) -> Dict[str, Any]:
+        """Go-specific pipeline configuration."""
+        return {
+            'docker_image': 'golang:1.21-alpine',
+            'variables': {
+                'GOPATH': '$CI_PROJECT_DIR/.go',
+                'GO111MODULE': 'on'
+            },
+            'cache': {
+                'key': '${CI_JOB_NAME}-${CI_COMMIT_REF_SLUG}',
+                'paths': ['.go/', 'vendor/']
+            },
+            'before_script': [
+                'apk add --no-cache git gcc musl-dev'
+            ],
+            'jobs': {
+                'validate:lint': {
+                    'stage': 'validate',
+                    'script': [
+                        'go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest',
+                        'golangci-lint run --timeout 5m'
+                    ],
+                    'allow_failure': False
+                },
+                'validate:vet': {
+                    'stage': 'validate',
+                    'script': [
+                        'go vet ./...'
+                    ],
+                    'allow_failure': False
+                },
+                'build:compile': {
+                    'stage': 'build',
+                    'script': [
+                        'go build -v ./...'
+                    ],
+                    'artifacts': {
+                        'paths': ['bin/'],
+                        'expire_in': '1 week'
+                    }
+                },
+                'test:unit': {
+                    'stage': 'test',
+                    'script': [
+                        f'go test -v -coverprofile=coverage.out -covermode=atomic ./...',
+                        'go tool cover -func=coverage.out',
+                        f'coverage=$(go tool cover -func=coverage.out | grep total | awk \'{{print $3}}\' | sed \'s/%//\')',
+                        f'echo "Coverage: $coverage%"',
+                        f'if [ $(echo "$coverage < {self.min_coverage}" | bc) -eq 1 ]; then exit 1; fi'
+                    ],
+                    'coverage': '/Coverage: (\\d+\\.\\d+)%/',
+                    'artifacts': {
+                        'paths': ['coverage.out'],
+                        'expire_in': '30 days'
+                    }
+                },
+                'analyze:security': {
+                    'stage': 'analyze',
+                    'script': [
+                        'go install github.com/securego/gosec/v2/cmd/gosec@latest',
+                        'gosec -fmt json -out gosec-report.json ./...'
+                    ],
+                    'artifacts': {
+                        'paths': ['*-report.json'],
+                        'expire_in': '30 days'
+                    },
+                    'allow_failure': True
+                }
+            }
+        }
+
+    def _rust_config(self) -> Dict[str, Any]:
+        """Rust-specific pipeline configuration."""
+        return {
+            'docker_image': 'rust:1.75',
+            'variables': {
+                'CARGO_HOME': '$CI_PROJECT_DIR/.cargo'
+            },
+            'cache': {
+                'key': '${CI_JOB_NAME}-${CI_COMMIT_REF_SLUG}',
+                'paths': ['.cargo/', 'target/']
+            },
+            'jobs': {
+                'validate:lint': {
+                    'stage': 'validate',
+                    'script': [
+                        'rustup component add clippy rustfmt',
+                        'cargo fmt -- --check',
+                        'cargo clippy -- -D warnings'
+                    ],
+                    'allow_failure': False
+                },
+                'build:compile': {
+                    'stage': 'build',
+                    'script': [
+                        'cargo build --release'
+                    ],
+                    'artifacts': {
+                        'paths': ['target/release/'],
+                        'expire_in': '1 week'
+                    }
+                },
+                'test:unit': {
+                    'stage': 'test',
+                    'script': [
+                        'cargo install cargo-tarpaulin',
+                        f'cargo tarpaulin --out Xml --fail-under {self.min_coverage}'
+                    ],
+                    'coverage': '/(\\d+\\.\\d+)% coverage/',
+                    'artifacts': {
+                        'reports': {
+                            'coverage_report': {
+                                'coverage_format': 'cobertura',
+                                'path': 'cobertura.xml'
+                            }
+                        },
+                        'expire_in': '30 days'
+                    }
+                },
+                'analyze:security': {
+                    'stage': 'analyze',
+                    'script': [
+                        'cargo install cargo-audit',
+                        'cargo audit'
+                    ],
+                    'allow_failure': True
+                }
+            }
+        }
+
+    def _default_config(self) -> Dict[str, Any]:
+        """Default configuration for unknown tech stacks."""
+        return {
+            'docker_image': 'alpine:latest',
+            'jobs': {
+                'validate:check': {
+                    'stage': 'validate',
+                    'script': ['echo "No validation configured for unknown tech stack"']
+                },
+                'build:compile': {
+                    'stage': 'build',
+                    'script': ['echo "No build configured for unknown tech stack"']
+                },
+                'test:unit': {
+                    'stage': 'test',
+                    'script': ['echo "No tests configured for unknown tech stack"']
+                },
+                'analyze:check': {
+                    'stage': 'analyze',
+                    'script': ['echo "No analysis configured for unknown tech stack"']
+                },
+                'deploy:skip': {
+                    'stage': 'deploy',
+                    'script': ['echo "No deployment configured"']
+                }
+            }
+        }
+
     def generate_pipeline_yaml(self) -> str:
-        """
-        Generate CI/CD pipeline YAML based on configuration.
+        """Generate modern 5-stage GitLab CI YAML configuration."""
+        yaml_lines = []
 
-        Returns:
-            YAML string for pipeline configuration
-        """
-        yaml_lines = [
-            f"# Auto-generated CI/CD Pipeline for {self.backend}",
-            f"# Generated by PipelineConfig",
-            f"# Supports both Docker and Shell executors",
-            ""
-        ]
-
-        # Docker image commented out for shell executor compatibility
+        # Header
         yaml_lines.extend([
-            "# Uncomment for Docker executor:",
-            f"# image: {self.config['docker_image']}",
+            f"# Modern 5-Stage CI/CD Pipeline for {self.backend}",
+            "# Auto-generated by PipelineConfig",
+            "# Following CI/CD best practices for research comparability",
+            "",
+            f"image: {self.config.get('docker_image', 'alpine:latest')}",
             ""
         ])
-        
-        # Stages - add coverage verification stage for all languages with coverage tools
-        stages = self.config['stages'].copy()
-        if self.config.get('coverage_tool') and 'coverage' not in stages:
-            stages.append('coverage')
 
+        # Stages
         yaml_lines.extend([
             "stages:",
-            *[f"  - {stage}" for stage in stages],
+            *[f"  - {stage}" for stage in self.config['stages']],
             ""
         ])
-        
+
         # Variables
-        if self.config['variables']:
+        if 'variables' in self.config:
             yaml_lines.append("variables:")
             for key, value in self.config['variables'].items():
-                yaml_lines.append(f"  {key}: \"{value}\"")
+                yaml_lines.append(f'  {key}: "{value}"')
             yaml_lines.append("")
-        
+
         # Cache
-        if self.config['cache_paths']:
+        if 'cache' in self.config:
             yaml_lines.extend([
                 "cache:",
+                f"  key: {self.config['cache']['key']}",
                 "  paths:",
-                *[f"    - {path}" for path in self.config['cache_paths']],
+                *[f"    - {path}" for path in self.config['cache']['paths']],
                 ""
             ])
-        
-        # Simple but proper before script (only if commands exist)
-        if self.config['before_script']:
+
+        # Default configuration
+        yaml_lines.extend([
+            "default:",
+            "  interruptible: true",
+            "  retry:",
+            "    max: 2",
+            "    when:",
+            "      - runner_system_failure",
+            "      - stuck_or_timeout_failure",
+            ""
+        ])
+
+        # Global before_script if exists
+        if 'before_script' in self.config and self.config['before_script']:
             yaml_lines.append("before_script:")
             for cmd in self.config['before_script']:
                 yaml_lines.append(f"  - {cmd}")
             yaml_lines.append("")
-        
-        # Test job - simplified without coverage artifacts
+
+        # Jobs
+        if 'jobs' in self.config:
+            for job_name, job_config in self.config['jobs'].items():
+                yaml_lines.append(f"{job_name}:")
+                yaml_lines.append(f"  stage: {job_config['stage']}")
+
+                # Add needs if specified
+                if 'needs' in job_config:
+                    yaml_lines.append("  needs:")
+                    for need in job_config['needs']:
+                        yaml_lines.append(f"    - {need}")
+
+                # Script
+                yaml_lines.append("  script:")
+                for cmd in job_config['script']:
+                    yaml_lines.append(f"    - {cmd}")
+
+                # Coverage regex
+                if 'coverage' in job_config:
+                    yaml_lines.append(f"  coverage: '{job_config['coverage']}'")
+
+                # Artifacts
+                if 'artifacts' in job_config:
+                    yaml_lines.append("  artifacts:")
+                    if 'reports' in job_config['artifacts']:
+                        yaml_lines.append("    reports:")
+                        for report_type, report_path in job_config['artifacts']['reports'].items():
+                            if isinstance(report_path, dict):
+                                yaml_lines.append(f"      {report_type}:")
+                                for key, value in report_path.items():
+                                    yaml_lines.append(f"        {key}: {value}")
+                            else:
+                                yaml_lines.append(f"      {report_type}: {report_path}")
+                    if 'paths' in job_config['artifacts']:
+                        yaml_lines.append("    paths:")
+                        for path in job_config['artifacts']['paths']:
+                            yaml_lines.append(f"      - {path}")
+                    if 'expire_in' in job_config['artifacts']:
+                        yaml_lines.append(f"    expire_in: {job_config['artifacts']['expire_in']}")
+
+                # Allow failure
+                if job_config.get('allow_failure', False):
+                    yaml_lines.append("  allow_failure: true")
+
+                yaml_lines.append("")
+
+        # Add metrics collection job
         yaml_lines.extend([
-            "test_job:",
-            "  stage: test",
-            "  script:"
-        ])
-        if self.config['test_commands']:
-            for cmd in self.config['test_commands']:
-                yaml_lines.append(f"    - {cmd}")
-        else:
-            # GitLab requires at least one command in script
-            yaml_lines.append("    - echo 'No tests configured yet'")
-
-        # Add test reporting and coverage artifacts for all languages
-        if self.config.get('coverage_tool'):
-            yaml_lines.append("  # Coverage reporting")
-            yaml_lines.append("  artifacts:")
-
-            # Language-specific artifact paths
-            if self.backend == 'java':
-                yaml_lines.extend([
-                    "    reports:",
-                    "      junit: target/surefire-reports/TEST-*.xml",
-                    "      coverage_report:",
-                    "        coverage_format: cobertura",
-                    "        path: target/site/jacoco/jacoco.xml",
-                    "    paths:",
-                    "      - target/site/jacoco/"
-                ])
-            elif self.backend == 'python':
-                yaml_lines.extend([
-                    "    reports:",
-                    "      coverage_report:",
-                    "        coverage_format: cobertura",
-                    "        path: coverage.xml",
-                    "    paths:",
-                    "      - coverage.xml",
-                    "      - htmlcov/"
-                ])
-            elif self.backend in ['javascript', 'nodejs', 'node']:
-                yaml_lines.extend([
-                    "    paths:",
-                    "      - coverage/"
-                ])
-            elif self.backend == 'go':
-                yaml_lines.extend([
-                    "    paths:",
-                    "      - coverage.out"
-                ])
-            elif self.backend == 'rust':
-                yaml_lines.extend([
-                    "    reports:",
-                    "      coverage_report:",
-                    "        coverage_format: cobertura",
-                    "        path: coverage/cobertura.xml",
-                    "    paths:",
-                    "      - coverage/"
-                ])
-
-            yaml_lines.extend([
-                "    when: always",
-                "    expire_in: 1 day"
-            ])
-
-        yaml_lines.append("")
-        
-        # Build job - simplified
-        yaml_lines.extend([
-            "build_job:",
-            "  stage: build",
-            "  script:"
-        ])
-        if self.config['build_commands']:
-            for cmd in self.config['build_commands']:
-                yaml_lines.append(f"    - {cmd}")
-        else:
-            # GitLab requires at least one command in script
-            yaml_lines.append("    - echo 'No build configured yet'")
-        yaml_lines.extend([
-            "  # Keep compiled classes for verification",
+            "# Metrics collection for research",
+            "collect:metrics:",
+            "  stage: deploy",
+            "  script:",
+            "    - echo 'Collecting pipeline metrics for research'",
+            "    - |",
+            "      cat > metrics.json << EOF",
+            "      {",
+            '        "pipeline_id": "$CI_PIPELINE_ID",',
+            f'        "tech_stack": "{self.backend}",',
+            '        "timestamp": "$(date -Iseconds)",',
+            f'        "coverage_threshold": {self.min_coverage},',
+            '        "pipeline_status": "$CI_PIPELINE_STATUS"',
+            "      }",
+            "      EOF",
             "  artifacts:",
             "    paths:",
-            "      - target/classes/",
-            "    expire_in: 1 day"
+            "      - metrics.json",
+            "    expire_in: 90 days",
+            "  when: always",
+            ""
         ])
 
-        # Add coverage verification job for all languages
-        if self.config.get('coverage_tool'):
-            min_cov = self.config.get('min_coverage', 70)
-            yaml_lines.extend([
-                "",
-                "coverage_check:",
-                "  stage: coverage",
-                "  script:",
-                f"    - echo \"Verifying minimum {min_cov}% code coverage\""
-            ])
-
-            # Language-specific coverage verification commands
-            if self.backend == 'java':
-                yaml_lines.append("    - mvn jacoco:check ${MAVEN_CLI_OPTS}")
-            elif self.backend == 'python':
-                yaml_lines.extend([
-                    f"    - pip install coverage",
-                    f"    - coverage report --fail-under={min_cov} || (echo \"Coverage below {min_cov}%\" && exit 1)"
-                ])
-            elif self.backend in ['javascript', 'nodejs', 'node']:
-                yaml_lines.extend([
-                    f"    - npm test -- --coverage --coverageThreshold='{{\"global\":{{\"lines\":{min_cov},\"statements\":{min_cov},\"functions\":{min_cov},\"branches\":{min_cov}}}}}' --watchAll=false || (echo \"Coverage below {min_cov}%\" && exit 1)"
-                ])
-            elif self.backend == 'go':
-                yaml_lines.extend([
-                    f"    - |",
-                    f"      coverage=$(go tool cover -func=coverage.out | grep total | awk '{{print $3}}' | sed 's/%//')",
-                    f"      if (( $(echo \"$coverage < {min_cov}\" | bc -l) )); then",
-                    f"        echo \"Coverage $coverage% is below {min_cov}%\"",
-                    f"        exit 1",
-                    f"      fi",
-                    f"      echo \"Coverage: $coverage%\""
-                ])
-            elif self.backend == 'rust':
-                yaml_lines.extend([
-                    f"    - cargo tarpaulin --fail-under {min_cov} || (echo \"Coverage below {min_cov}%\" && exit 1)"
-                ])
-
-            yaml_lines.extend([
-                "  dependencies:",
-                "    - test_job",
-                "  allow_failure: false"
-            ])
-
         return '\n'.join(yaml_lines)
-    
-    def get_test_command(self) -> str:
-        """Get the appropriate test command for the tech stack."""
-        if self.config['test_framework'] == 'pytest':
-            return f"python -m pytest {self.config['test_directory']}/ -v"
-        elif self.config['test_framework'] == 'jest':
-            return "npm test"
-        elif self.config['test_framework'] in ['junit', 'junit5']:
-            return "mvn test"
-        elif self.config['test_framework'] == 'go test':
-            return "go test ./..."
-        elif self.config['test_framework'] == 'cargo test':
-            return "cargo test"
-        else:
-            return "echo 'No test framework configured'"
-    
-    def get_coverage_command(self) -> str:
-        """Get the appropriate coverage command for the tech stack."""
-        if self.config['coverage_tool'] == 'pytest-cov':
-            return f"python -m pytest {self.config['test_directory']}/ --cov={self.config['source_directory']} --cov-report=term-missing --cov-report=xml"
-        elif self.config['coverage_tool'] == 'jest':
-            return "npm test -- --coverage"
-        elif self.config['coverage_tool'] == 'jacoco':
-            return "mvn clean test jacoco:report"
-        elif self.config['coverage_tool'] == 'go test':
-            return "go test -cover ./..."
-        elif self.config['coverage_tool'] == 'tarpaulin':
-            return "cargo tarpaulin --out Xml"
-        else:
-            return "echo 'No coverage tool configured'"
-    
-    def get_dependencies_file(self) -> str:
-        """Get the appropriate dependencies file name."""
-        return self.config['requirements_file'] or 'requirements.txt'
-    
-    def detect_tech_stack(self, project_path: Path) -> Dict[str, str]:
-        """
-        Auto-detect tech stack from project files.
-        
-        Args:
-            project_path: Path to project root
-            
-        Returns:
-            Dict with detected backend and frontend
-        """
-        detected = {'backend': 'unknown', 'frontend': 'none'}
-        
-        # Backend detection
-        if (project_path / 'requirements.txt').exists() or \
-           (project_path / 'setup.py').exists() or \
-           (project_path / 'pyproject.toml').exists():
-            detected['backend'] = 'python'
-        elif (project_path / 'package.json').exists():
-            detected['backend'] = 'nodejs'
-        elif (project_path / 'pom.xml').exists():
-            detected['backend'] = 'java'
-        elif (project_path / 'go.mod').exists():
-            detected['backend'] = 'go'
-        elif (project_path / 'Cargo.toml').exists():
-            detected['backend'] = 'rust'
-        elif (project_path / 'composer.json').exists():
-            detected['backend'] = 'php'
-        elif (project_path / 'Gemfile').exists():
-            detected['backend'] = 'ruby'
-        
-        # Frontend detection
-        if (project_path / 'index.html').exists():
-            detected['frontend'] = 'html-css-js'
-        elif (project_path / 'package.json').exists():
-            # Check for frontend frameworks
-            try:
-                with open(project_path / 'package.json', 'r') as f:
-                    package_json = json.load(f)
-                    deps = {**package_json.get('dependencies', {}), 
-                           **package_json.get('devDependencies', {})}
-                    
-                    if 'react' in deps:
-                        detected['frontend'] = 'react'
-                    elif 'vue' in deps:
-                        detected['frontend'] = 'vue'
-                    elif 'angular' in deps or '@angular/core' in deps:
-                        detected['frontend'] = 'angular'
-            except:
-                pass
-        
-        return detected
-    
-    def get_minimal_pom_xml(self, project_name: str = "project") -> str:
-        """
-        Generate a minimal but proper pom.xml for Java projects with JUnit 5.
-        Simple configuration that actually works for real testing.
-        """
-        return f"""<?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
-         http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
-    <modelVersion>4.0.0</modelVersion>
-    <groupId>com.example</groupId>
-    <artifactId>{project_name}</artifactId>
-    <version>1.0-SNAPSHOT</version>
-    <packaging>jar</packaging>
 
-    <properties>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
-        <junit.version>5.10.1</junit.version>
-    </properties>
+# Example usage and testing
+if __name__ == "__main__":
+    # Test different tech stacks
+    tech_stacks = [
+        {'backend': 'python', 'min_coverage': 80},
+        {'backend': 'java', 'min_coverage': 75},
+        {'backend': 'javascript', 'min_coverage': 70},
+        {'backend': 'go', 'min_coverage': 65},
+        {'backend': 'rust', 'min_coverage': 60},
+        {'backend': 'unknown'},
+    ]
 
-    <dependencies>
-        <!-- JUnit 5 (Jupiter) for testing -->
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <version>${{junit.version}}</version>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
-
-    <build>
-        <sourceDirectory>src/main/java</sourceDirectory>
-        <testSourceDirectory>src/test/java</testSourceDirectory>
-
-        <plugins>
-            <!-- Compiler plugin -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.11.0</version>
-                <configuration>
-                    <source>21</source>
-                    <target>21</target>
-                    <compilerArgs>
-                        <arg>-Xlint:unchecked</arg>
-                    </compilerArgs>
-                </configuration>
-            </plugin>
-
-            <!-- Surefire plugin for running tests with JUnit 5 -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.2.2</version>
-                <configuration>
-                    <includes>
-                        <include>**/*Test.java</include>
-                        <include>**/Test*.java</include>
-                    </includes>
-                </configuration>
-            </plugin>
-
-            <!-- JaCoCo plugin for code coverage -->
-            <plugin>
-                <groupId>org.jacoco</groupId>
-                <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.11</version>
-                <executions>
-                    <execution>
-                        <id>prepare-agent</id>
-                        <goals>
-                            <goal>prepare-agent</goal>
-                        </goals>
-                    </execution>
-                    <execution>
-                        <id>report</id>
-                        <phase>test</phase>
-                        <goals>
-                            <goal>report</goal>
-                        </goals>
-                    </execution>
-                    <execution>
-                        <id>check</id>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                        <configuration>
-                            <rules>
-                                <rule>
-                                    <element>BUNDLE</element>
-                                    <limits>
-                                        <limit>
-                                            <counter>LINE</counter>
-                                            <value>COVEREDRATIO</value>
-                                            <minimum>{self.min_coverage / 100:.2f}</minimum>
-                                        </limit>
-                                    </limits>
-                                </rule>
-                            </rules>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
-</project>"""
-
-    def get_minimal_test_file(self, package_name: str = "com.example") -> str:
-        """
-        Generate a minimal test file using JUnit 5 that will always pass.
-        This ensures the pipeline can succeed on first run.
-        """
-        package_path = package_name.replace('.', '/')
-        return f"""package {package_name};
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.DisplayName;
-import static org.junit.jupiter.api.Assertions.*;
-
-public class AppTest {{
-
-    @Test
-    @DisplayName("Basic test that should always pass")
-    public void testBasic() {{
-        // Simple test that always passes
-        assertTrue(true, "Basic test should pass");
-    }}
-
-    @Test
-    @DisplayName("Test simple addition")
-    public void testAddition() {{
-        // Another simple test
-        assertEquals(4, 2 + 2, "2 + 2 should equal 4");
-    }}
-
-    @Test
-    @DisplayName("Test App main method exists")
-    public void testMainMethodExists() {{
-        // Test that we can call main without exceptions
-        assertDoesNotThrow(() -> {{
-            App.main(new String[]{{}});
-        }});
-    }}
-}}"""
-
-    def get_minimal_main_file(self, package_name: str = "com.example") -> str:
-        """
-        Generate a minimal main Java file.
-        """
-        return f"""package {package_name};
-
-public class App {{
-
-    public static void main(String[] args) {{
-        System.out.println("Hello, Pipeline!");
-    }}
-
-    public static int add(int a, int b) {{
-        return a + b;
-    }}
-}}"""
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Export configuration as dictionary."""
-        return {
-            'tech_stack': self.tech_stack,
-            'config': self.config
-        }
+    for tech in tech_stacks:
+        config = PipelineConfig(tech)
+        print(f"\n{'='*60}")
+        print(f"Tech Stack: {tech}")
+        print(f"Stages: {config.config['stages']}")
+        print(f"Jobs: {list(config.config.get('jobs', {}).keys())}")
+        print('='*60)
