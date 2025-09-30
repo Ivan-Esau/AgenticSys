@@ -22,8 +22,8 @@ class PipelineManager:
     def _normalize_tech_stack(self, tech_stack: Dict[str, str]) -> Dict[str, str]:
         """
         Normalize tech stack format from Web GUI to PipelineConfig format.
-        Web GUI format: {'language': 'Java', 'framework': None, ...}
-        PipelineConfig format: {'backend': 'java', 'frontend': 'none'}
+        Web GUI format: {'language': 'Java', 'framework': None, 'min_coverage': 70, ...}
+        PipelineConfig format: {'backend': 'java', 'frontend': 'none', 'min_coverage': 70}
         """
         normalized = {}
 
@@ -52,6 +52,10 @@ class PipelineManager:
         # Default to 'python' for backend if not set
         if 'backend' not in normalized:
             normalized['backend'] = 'python'
+
+        # Preserve min_coverage if provided
+        if 'min_coverage' in tech_stack:
+            normalized['min_coverage'] = tech_stack['min_coverage']
 
         return normalized
 

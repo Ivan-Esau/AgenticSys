@@ -14,14 +14,15 @@ class PipelineConfig:
     def __init__(self, tech_stack: Optional[Dict[str, str]] = None):
         """
         Initialize pipeline configuration based on tech stack.
-        
+
         Args:
-            tech_stack: Dict with 'backend' and 'frontend' keys
+            tech_stack: Dict with 'backend', 'frontend', and optional 'min_coverage' keys
         """
         self.tech_stack = tech_stack or {}
         self.backend = self.tech_stack.get('backend', 'python')
         self.frontend = self.tech_stack.get('frontend', 'none')
-        
+        self.min_coverage = self.tech_stack.get('min_coverage', 70)
+
         # Load configuration based on tech stack
         self.config = self._load_stack_config()
     
@@ -43,7 +44,7 @@ class PipelineConfig:
             'test_directory': 'tests',
             'source_directory': 'src',
             'coverage_tool': None,
-            'min_coverage': 70
+            'min_coverage': self.min_coverage
         }
         
         # Python configuration
@@ -68,7 +69,10 @@ class PipelineConfig:
                 'test_commands': [
                     'pip install pytest pytest-cov',
                     'if [ -f requirements.txt ]; then pip install -r requirements.txt; fi',
-                    'python -m pytest tests/ -v --cov=src --cov-report=term-missing'
+                    'python -m pytest tests/ -v --cov=src --cov-report=term-missing --cov-report=xml',
+                    '# Show coverage summary',
+                    'echo "=== Coverage Results ==="',
+                    'if [ -f coverage.xml ]; then echo "Coverage report generated at coverage.xml"; fi'
                 ],
                 'build_commands': [
                     'python -m py_compile src/**/*.py || true',
@@ -94,7 +98,10 @@ class PipelineConfig:
                     'npm ci || npm install'
                 ],
                 'test_commands': [
-                    'npm test -- --coverage --watchAll=false'
+                    'npm test -- --coverage --watchAll=false',
+                    '# Show coverage summary',
+                    'echo "=== Coverage Results ==="',
+                    'if [ -f coverage/coverage-summary.json ]; then echo "Coverage report generated at coverage/"; fi'
                 ],
                 'build_commands': [
                     'npm run build || echo "No build script defined"'
@@ -108,7 +115,7 @@ class PipelineConfig:
                 'test_framework': 'junit5',  # Using JUnit 5 (Jupiter)
                 'package_manager': 'maven',
                 'requirements_file': 'pom.xml',
-                'coverage_tool': None,  # Skip coverage initially for simplicity
+                'coverage_tool': 'jacoco',  # Use JaCoCo for code coverage
                 'cache_paths': ['.m2/repository'],  # Cache Maven dependencies
                 'variables': {
                     'MAVEN_OPTS': '-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository',
@@ -122,11 +129,14 @@ class PipelineConfig:
                     'echo "<?xml version=\\"1.0\\"?><settings><localRepository>${user.home}/.m2/repository</localRepository></settings>" > ~/.m2/settings.xml'
                 ],
                 'test_commands': [
-                    # Real test execution with JUnit 5 - will fail if tests fail
-                    'mvn clean test ${MAVEN_CLI_OPTS}',
+                    # Real test execution with JUnit 5 and JaCoCo coverage
+                    'mvn clean test jacoco:report ${MAVEN_CLI_OPTS}',
                     '# Show test results for pipeline monitoring',
                     'echo "=== Test Results ==="',
-                    'find target/surefire-reports -name "*.txt" -exec echo {} \\; -exec head -20 {} \\; || echo "No test reports found"'
+                    'find target/surefire-reports -name "*.txt" -exec echo {} \\; -exec head -20 {} \\; || echo "No test reports found"',
+                    '# Show coverage summary',
+                    'echo "=== Coverage Results ==="',
+                    'if [ -f target/site/jacoco/index.html ]; then echo "Coverage report generated at target/site/jacoco/index.html"; fi'
                 ],
                 'build_commands': [
                     # Real build - will fail if compilation fails
@@ -158,7 +168,10 @@ class PipelineConfig:
                     'go mod download || true'
                 ],
                 'test_commands': [
-                    'go test -v -cover ./...'
+                    'go test -v -coverprofile=coverage.out -covermode=atomic ./...',
+                    '# Show coverage summary',
+                    'echo "=== Coverage Results ==="',
+                    'go tool cover -func=coverage.out || echo "No coverage data found"'
                 ],
                 'build_commands': [
                     'go build -v ./...'
@@ -182,7 +195,11 @@ class PipelineConfig:
                     'cargo --version'
                 ],
                 'test_commands': [
-                    'cargo test --verbose'
+                    'cargo install cargo-tarpaulin || echo "Installing tarpaulin"',
+                    'cargo tarpaulin --out Xml --output-dir coverage --verbose',
+                    '# Show coverage summary',
+                    'echo "=== Coverage Results ==="',
+                    'if [ -f coverage/cobertura.xml ]; then echo "Coverage report generated at coverage/cobertura.xml"; fi'
                 ],
                 'build_commands': [
                     'cargo build --release'
@@ -212,10 +229,14 @@ class PipelineConfig:
             ""
         ])
         
-        # Stages
+        # Stages - add coverage verification stage for all languages with coverage tools
+        stages = self.config['stages'].copy()
+        if self.config.get('coverage_tool') and 'coverage' not in stages:
+            stages.append('coverage')
+
         yaml_lines.extend([
             "stages:",
-            *[f"  - {stage}" for stage in self.config['stages']],
+            *[f"  - {stage}" for stage in stages],
             ""
         ])
         
@@ -251,13 +272,53 @@ class PipelineConfig:
         for cmd in self.config['test_commands']:
             yaml_lines.append(f"    - {cmd}")
 
-        # Only add basic test reporting for Java
-        if self.backend == 'java':
+        # Add test reporting and coverage artifacts for all languages
+        if self.config.get('coverage_tool'):
+            yaml_lines.append("  # Coverage reporting")
+            yaml_lines.append("  artifacts:")
+
+            # Language-specific artifact paths
+            if self.backend == 'java':
+                yaml_lines.extend([
+                    "    reports:",
+                    "      junit: target/surefire-reports/TEST-*.xml",
+                    "      coverage_report:",
+                    "        coverage_format: cobertura",
+                    "        path: target/site/jacoco/jacoco.xml",
+                    "    paths:",
+                    "      - target/site/jacoco/"
+                ])
+            elif self.backend == 'python':
+                yaml_lines.extend([
+                    "    reports:",
+                    "      coverage_report:",
+                    "        coverage_format: cobertura",
+                    "        path: coverage.xml",
+                    "    paths:",
+                    "      - coverage.xml",
+                    "      - htmlcov/"
+                ])
+            elif self.backend in ['javascript', 'nodejs', 'node']:
+                yaml_lines.extend([
+                    "    paths:",
+                    "      - coverage/"
+                ])
+            elif self.backend == 'go':
+                yaml_lines.extend([
+                    "    paths:",
+                    "      - coverage.out"
+                ])
+            elif self.backend == 'rust':
+                yaml_lines.extend([
+                    "    reports:",
+                    "      coverage_report:",
+                    "        coverage_format: cobertura",
+                    "        path: coverage/cobertura.xml",
+                    "    paths:",
+                    "      - coverage/"
+                ])
+
             yaml_lines.extend([
-                "  # Simple test result reporting",
-                "  artifacts:",
-                "    reports:",
-                "      junit: target/surefire-reports/TEST-*.xml",
                 "    when: always",
                 "    expire_in: 1 day"
             ])
@@ -279,7 +340,51 @@ class PipelineConfig:
             "      - target/classes/",
             "    expire_in: 1 day"
         ])
-        
+
+        # Add coverage verification job for all languages
+        if self.config.get('coverage_tool'):
+            min_cov = self.config.get('min_coverage', 70)
+            yaml_lines.extend([
+                "",
+                "coverage_check:",
+                "  stage: coverage",
+                "  script:",
+                f"    - echo \"Verifying minimum {min_cov}% code coverage\""
+            ])
+
+            # Language-specific coverage verification commands
+            if self.backend == 'java':
+                yaml_lines.append("    - mvn jacoco:check ${MAVEN_CLI_OPTS}")
+            elif self.backend == 'python':
+                yaml_lines.extend([
+                    f"    - pip install coverage",
+                    f"    - coverage report --fail-under={min_cov} || (echo \"Coverage below {min_cov}%\" && exit 1)"
+                ])
+            elif self.backend in ['javascript', 'nodejs', 'node']:
+                yaml_lines.extend([
+                    f"    - npm test -- --coverage --coverageThreshold='{{\"global\":{{\"lines\":{min_cov},\"statements\":{min_cov},\"functions\":{min_cov},\"branches\":{min_cov}}}}}' --watchAll=false || (echo \"Coverage below {min_cov}%\" && exit 1)"
+                ])
+            elif self.backend == 'go':
+                yaml_lines.extend([
+                    f"    - |",
+                    f"      coverage=$(go tool cover -func=coverage.out | grep total | awk '{{print $3}}' | sed 's/%//')",
+                    f"      if (( $(echo \"$coverage < {min_cov}\" | bc -l) )); then",
+                    f"        echo \"Coverage $coverage% is below {min_cov}%\"",
+                    f"        exit 1",
+                    f"      fi",
+                    f"      echo \"Coverage: $coverage%\""
+                ])
+            elif self.backend == 'rust':
+                yaml_lines.extend([
+                    f"    - cargo tarpaulin --fail-under {min_cov} || (echo \"Coverage below {min_cov}%\" && exit 1)"
+                ])
+
+            yaml_lines.extend([
+                "  dependencies:",
+                "    - test_job",
+                "  allow_failure: false"
+            ])
+
         return '\n'.join(yaml_lines)
     
     def get_test_command(self) -> str:
@@ -432,6 +537,48 @@ class PipelineConfig:
                         <include>**/Test*.java</include>
                     </includes>
                 </configuration>
+            </plugin>
+
+            <!-- JaCoCo plugin for code coverage -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.11</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>check</id>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <rule>
+                                    <element>BUNDLE</element>
+                                    <limits>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>{self.min_coverage / 100:.2f}</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
