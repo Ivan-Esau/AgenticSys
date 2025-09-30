@@ -13,95 +13,115 @@ import threading
 
 
 class OutputCapture:
-    """Captures stdout/stderr output and sends it via WebSocket"""
+    """Captures stdout/stderr output and sends it via WebSocket - OPTIMIZED"""
 
     def __init__(self, ws_manager, agent_name: str):
         self.ws_manager = ws_manager
         self.agent_name = agent_name
         self.original_stdout = None
         self.original_stderr = None
-        self.capture_buffer = io.StringIO()
+        self.sentence_buffer = ""  # Buffer to accumulate text
+        self.batch_buffer = []  # Batch multiple messages
+        self.write_count = 0  # Track writes for time check throttling
         self.last_send_time = time.time()
-        self.send_interval = 0.5  # Send updates every 0.5 seconds
-        self.min_chars_threshold = 100  # Minimum characters before sending
-        self.sentence_buffer = ""  # Buffer to accumulate text until complete sentences
+        self.send_interval = 0.2  # Send every 0.2 seconds for better responsiveness
+        self.batch_size = 2  # Send every 2 messages (reduced for visibility)
 
     def write(self, text: str):
-        """Write method for stdout/stderr replacement"""
+        """Write method for stdout/stderr replacement - OPTIMIZED"""
         # Write to original stdout
         if self.original_stdout:
             self.original_stdout.write(text)
 
-        # Filter out unwanted messages immediately
+        # Fast filter for unwanted messages (single check)
         if "Session termination failed" in text:
-            return  # Skip this message entirely
+            return
 
-        # Add text to sentence buffer
+        # Accumulate text
         self.sentence_buffer += text
-        current_time = time.time()
+        self.write_count += 1
 
-        # Look for natural break points
-        break_points = ['.', '!', '?', '\n', ':', ';']
+        # CRITICAL: Immediate send for tool calls and important progress markers
+        important_markers = [
+            "[TOOL]", "[MCP]", "[DONE]", "Reading:", "Creating:", "Updating:",
+            "list_issues", "get_file_contents", "get_repo_tree", "create_or_update_file",
+            "list_branches", "list_merge_requests", "get_project", "get_issue"
+        ]
+        is_important = any(marker in text for marker in important_markers)
+
+        if is_important:
+            # Force immediate send for visibility
+            if self.sentence_buffer.strip():
+                self._batch_and_send()
+                self._send_batch()  # Force immediate WebSocket send
+            return
+
+        # Simplified send logic - prioritize responsiveness
         should_send = False
+        buffer_len = len(self.sentence_buffer)
 
-        # Immediate send on newline (for system messages and headers)
-        if '\n' in self.sentence_buffer:
+        if '\n' in text:  # Immediate send on newline
             should_send = True
-
-        # Send if we have natural break points and some content
-        elif any(bp in self.sentence_buffer for bp in break_points):
-            # More lenient: send if we have any break point and reasonable length
-            if len(self.sentence_buffer.strip()) >= 20:
-                should_send = True
-
-        # Also send if buffer is getting long or time threshold reached
-        if (len(self.sentence_buffer) >= 50 or  # Lower threshold
-            (current_time - self.last_send_time > self.send_interval) or
-            len(self.sentence_buffer) >= 200):  # Force send if very long
+        elif buffer_len >= 100:  # Force send on moderate buffer
             should_send = True
-
-        # Emergency send if nothing sent for too long
-        if current_time - self.last_send_time > 1.5:  # 1.5 second maximum delay
-            should_send = True
+        else:
+            # Check time periodically (every 20 writes for balance)
+            if self.write_count % 20 == 0:
+                current_time = time.time()
+                if current_time - self.last_send_time > self.send_interval:
+                    should_send = True
+                    self.last_send_time = current_time
 
         if should_send and self.sentence_buffer.strip():
-            self._send_sentence_buffer()
-            self.last_send_time = current_time
+            self._batch_and_send()
 
     def flush(self):
         """Flush method for stdout/stderr replacement"""
         if self.original_stdout:
             self.original_stdout.flush()
-        self._send_sentence_buffer()
-
-    def _send_sentence_buffer(self):
-        """Send accumulated sentence buffer via WebSocket"""
+        # Force send remaining buffer
         if self.sentence_buffer.strip():
-            # Create async task to send via WebSocket
-            asyncio.create_task(
-                self.ws_manager.send_agent_output(
-                    self.agent_name,
-                    self.sentence_buffer,
-                    "info"
-                )
-            )
-            # Clear sentence buffer
+            self._batch_and_send()
+        # Send any remaining batched messages
+        if self.batch_buffer:
+            self._send_batch()
+
+    def _batch_and_send(self):
+        """Add to batch and send if batch is full - OPTIMIZED"""
+        if self.sentence_buffer.strip():
+            self.batch_buffer.append(self.sentence_buffer)
             self.sentence_buffer = ""
 
-    def _send_captured_output(self):
-        """Send captured output via WebSocket (legacy method)"""
-        output = self.capture_buffer.getvalue()
-        if output:
-            # Create async task to send via WebSocket
-            asyncio.create_task(
+            # Send batch if full
+            if len(self.batch_buffer) >= self.batch_size:
+                self._send_batch()
+
+    def _send_batch(self):
+        """Send batched messages via WebSocket - NON-BLOCKING"""
+        if not self.batch_buffer:
+            return
+
+        # Join all messages with newlines
+        combined_output = "\n".join(self.batch_buffer)
+        self.batch_buffer = []
+
+        # Create fire-and-forget task (async-safe)
+        try:
+            # Try to get the current event loop
+            loop = asyncio.get_running_loop()
+            # Schedule the coroutine to run in the event loop
+            asyncio.run_coroutine_threadsafe(
                 self.ws_manager.send_agent_output(
                     self.agent_name,
-                    output,
+                    combined_output,
                     "info"
-                )
+                ),
+                loop
             )
-            # Clear buffer
-            self.capture_buffer = io.StringIO()
+        except RuntimeError:
+            # No event loop - save for later or write to original stdout
+            if self.original_stdout:
+                self.original_stdout.write(f"[{self.agent_name}] {combined_output}\n")
 
     def __enter__(self):
         """Start capturing output"""
@@ -113,8 +133,8 @@ class OutputCapture:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Stop capturing output"""
-        # Send any remaining output
-        self._send_sentence_buffer()
+        # Send any remaining output (uses flush which handles both buffers)
+        self.flush()
 
         # Restore original stdout/stderr
         sys.stdout = self.original_stdout
@@ -135,13 +155,19 @@ class AgentMonitor:
         # Record start time
         self.agent_start_times[agent_name] = datetime.now()
 
-        # Send agent start event
-        asyncio.create_task(
-            self.ws_manager.send_event("agent_start", {
-                "agent": agent_name,
-                "timestamp": datetime.now().isoformat()
-            })
-        )
+        # Send agent start event (async-safe)
+        try:
+            loop = asyncio.get_running_loop()
+            asyncio.run_coroutine_threadsafe(
+                self.ws_manager.send_event("agent_start", {
+                    "agent": agent_name,
+                    "timestamp": datetime.now().isoformat()
+                }),
+                loop
+            )
+        except RuntimeError:
+            # No event loop - skip WebSocket send
+            pass
 
         # Capture output
         capture = OutputCapture(self.ws_manager, agent_name)
@@ -153,14 +179,20 @@ class AgentMonitor:
             # Calculate duration
             duration = (datetime.now() - self.agent_start_times[agent_name]).total_seconds()
 
-            # Send agent complete event
-            asyncio.create_task(
-                self.ws_manager.send_event("agent_complete", {
-                    "agent": agent_name,
-                    "duration": duration,
-                    "timestamp": datetime.now().isoformat()
-                })
-            )
+            # Send agent complete event (async-safe)
+            try:
+                loop = asyncio.get_running_loop()
+                asyncio.run_coroutine_threadsafe(
+                    self.ws_manager.send_event("agent_complete", {
+                        "agent": agent_name,
+                        "duration": duration,
+                        "timestamp": datetime.now().isoformat()
+                    }),
+                    loop
+                )
+            except RuntimeError:
+                # No event loop - skip WebSocket send
+                pass
 
     def record_output(self, agent_name: str, output: str, level: str = "info"):
         """Record agent output"""
@@ -173,10 +205,16 @@ class AgentMonitor:
             "level": level
         })
 
-        # Send via WebSocket
-        asyncio.create_task(
-            self.ws_manager.send_agent_output(agent_name, output, level)
-        )
+        # Send via WebSocket (async-safe)
+        try:
+            loop = asyncio.get_running_loop()
+            asyncio.run_coroutine_threadsafe(
+                self.ws_manager.send_agent_output(agent_name, output, level),
+                loop
+            )
+        except RuntimeError:
+            # No event loop - skip WebSocket send
+            pass
 
     def get_agent_outputs(self, agent_name: str) -> list:
         """Get all outputs for a specific agent"""
@@ -201,15 +239,21 @@ class ToolMonitor:
         key = f"{agent}:{tool}:{time.time()}"
         self.tool_timings[key] = time.time()
 
-        # Send tool start event
-        asyncio.create_task(
-            self.ws_manager.send_event("tool_start", {
-                "agent": agent,
-                "tool": tool,
-                "input": input_data,
-                "timestamp": datetime.now().isoformat()
-            })
-        )
+        # Send tool start event (async-safe)
+        try:
+            loop = asyncio.get_running_loop()
+            asyncio.run_coroutine_threadsafe(
+                self.ws_manager.send_event("tool_start", {
+                    "agent": agent,
+                    "tool": tool,
+                    "input": input_data,
+                    "timestamp": datetime.now().isoformat()
+                }),
+                loop
+            )
+        except RuntimeError:
+            # No event loop - skip WebSocket send
+            pass
 
         return key
 
@@ -236,17 +280,23 @@ class ToolMonitor:
             "timestamp": datetime.now()
         })
 
-        # Send tool end event
-        asyncio.create_task(
-            self.ws_manager.send_event("tool_end", {
-                "agent": agent,
-                "tool": tool,
-                "output": str(output) if output else None,
-                "duration_ms": duration_ms,
-                "success": success,
-                "timestamp": datetime.now().isoformat()
-            })
-        )
+        # Send tool end event (async-safe)
+        try:
+            loop = asyncio.get_running_loop()
+            asyncio.run_coroutine_threadsafe(
+                self.ws_manager.send_event("tool_end", {
+                    "agent": agent,
+                    "tool": tool,
+                    "output": str(output) if output else None,
+                    "duration_ms": duration_ms,
+                    "success": success,
+                    "timestamp": datetime.now().isoformat()
+                }),
+                loop
+            )
+        except RuntimeError:
+            # No event loop - skip WebSocket send
+            pass
 
         # Clean up timing record
         del self.tool_timings[key]
