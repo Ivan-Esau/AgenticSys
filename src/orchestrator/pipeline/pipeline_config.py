@@ -256,12 +256,12 @@ class PipelineConfig:
                 ""
             ])
         
-        # Simple but proper before script
-        yaml_lines.append("before_script:")
+        # Simple but proper before script (only if commands exist)
         if self.config['before_script']:
+            yaml_lines.append("before_script:")
             for cmd in self.config['before_script']:
                 yaml_lines.append(f"  - {cmd}")
-        yaml_lines.append("")
+            yaml_lines.append("")
         
         # Test job - simplified without coverage artifacts
         yaml_lines.extend([
@@ -269,8 +269,12 @@ class PipelineConfig:
             "  stage: test",
             "  script:"
         ])
-        for cmd in self.config['test_commands']:
-            yaml_lines.append(f"    - {cmd}")
+        if self.config['test_commands']:
+            for cmd in self.config['test_commands']:
+                yaml_lines.append(f"    - {cmd}")
+        else:
+            # GitLab requires at least one command in script
+            yaml_lines.append("    - echo 'No tests configured yet'")
 
         # Add test reporting and coverage artifacts for all languages
         if self.config.get('coverage_tool'):
@@ -331,8 +335,12 @@ class PipelineConfig:
             "  stage: build",
             "  script:"
         ])
-        for cmd in self.config['build_commands']:
-            yaml_lines.append(f"    - {cmd}")
+        if self.config['build_commands']:
+            for cmd in self.config['build_commands']:
+                yaml_lines.append(f"    - {cmd}")
+        else:
+            # GitLab requires at least one command in script
+            yaml_lines.append("    - echo 'No build configured yet'")
         yaml_lines.extend([
             "  # Keep compiled classes for verification",
             "  artifacts:",
