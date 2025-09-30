@@ -5,17 +5,29 @@ Handles connection and tool loading from GitLab MCP server.
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from src.core.llm.config import Config
-from typing import Tuple, List, Any
+from typing import Tuple, List, Any, Optional
 
+# Global cache for MCP connection
+_mcp_cache: Optional[Tuple[List[Any], MultiServerMCPClient]] = None
 
 async def load_mcp_tools() -> Tuple[List[Any], MultiServerMCPClient]:
     """
     Initialize MCP client and load GitLab tools.
+    Uses caching to avoid recreating connections.
 
     Returns:
         Tuple of (tools list, MCP client instance)
     """
+    global _mcp_cache
+
+    # Return cached connection if available
+    if _mcp_cache is not None:
+        tools, client = _mcp_cache
+        print(f"[MCP] Using cached connection ({len(tools)} tools)")
+        return tools, client
+
     url = Config.get_mcp_url()
+    print(f"[MCP] Connecting to {url}...")
 
     # Suppress MCP initialization errors/warnings
     import logging
@@ -41,21 +53,42 @@ async def load_mcp_tools() -> Tuple[List[Any], MultiServerMCPClient]:
     original_stderr = sys.stderr
 
     try:
-        # Initialize multi-server MCP client with comprehensive suppression
-        with open(os.devnull, 'w') as devnull:
-            with redirect_stderr(devnull), redirect_stdout(devnull):  # Suppress all output during init
-                client = MultiServerMCPClient({
-                    "gitlab": {
-                        "url": url,
-                        "transport": Config.MCP_TRANSPORT
-                    }
-                })
+        # Initialize multi-server MCP client with timeout
+        import asyncio
 
-                # Load tools from GitLab server
-                tools = await client.get_tools(server_name="gitlab")
+        async def init_client():
+            with open(os.devnull, 'w') as devnull:
+                with redirect_stderr(devnull), redirect_stdout(devnull):  # Suppress all output during init
+                    client = MultiServerMCPClient({
+                        "gitlab": {
+                            "url": url,
+                            "transport": Config.MCP_TRANSPORT
+                        }
+                    })
 
-        # Return tools directly - wrapping breaks LangGraph compatibility
-        return tools, client
+                    # Load tools from GitLab server
+                    tools = await client.get_tools(server_name="gitlab")
+            return tools, client
+
+        try:
+            # Add timeout to prevent hanging
+            tools, client = await asyncio.wait_for(init_client(), timeout=10.0)
+            print(f"[MCP] Successfully connected! Loaded {len(tools)} tools")
+
+            # Cache the connection for reuse
+            _mcp_cache = (tools, client)
+
+            # Return tools directly - wrapping breaks LangGraph compatibility
+            return tools, client
+
+        except asyncio.TimeoutError:
+            print(f"[MCP] ERROR: Connection timeout after 10 seconds!")
+            print(f"[MCP] Please check if MCP server is running at {url}")
+            raise RuntimeError(f"MCP connection timeout - server may be down or unresponsive")
+        except Exception as e:
+            # Show connection errors to help debug
+            print(f"[MCP] Warning: Error during MCP initialization: {str(e)[:100]}")
+            raise
 
     finally:
         # Restore original logging levels and stderr
@@ -63,6 +96,13 @@ async def load_mcp_tools() -> Tuple[List[Any], MultiServerMCPClient]:
         for logger, level in original_levels.items():
             logger.setLevel(level)
 
+
+
+def clear_mcp_cache():
+    """Clear the MCP connection cache to force reconnection."""
+    global _mcp_cache
+    _mcp_cache = None
+    print("[MCP] Cache cleared - next call will create new connection")
 
 
 async def get_common_tools_and_client() -> Tuple[List[Any], MultiServerMCPClient]:
