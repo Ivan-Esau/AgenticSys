@@ -140,8 +140,9 @@ class SystemOrchestrator:
             self.supervisor.min_coverage = config.get('min_coverage')
 
         # Execute supervisor (like CLI does)
-        with self.agent_monitor.capture_output("System"):
-            await self.supervisor.execute(mode=supervisor_mode, specific_issue=specific_issue)
+        # NOTE: Removed output capture to prevent stdout/stderr interference with tools
+        # Output capture was causing async/sync issues and breaking tool results
+        await self.supervisor.execute(mode=supervisor_mode, specific_issue=specific_issue)
 
         await self.ws_manager.send_success("Supervisor execution completed")
 
@@ -168,10 +169,9 @@ class SystemOrchestrator:
         if config.get('min_coverage'):
             self.supervisor.min_coverage = config.get('min_coverage')
 
-        # Initialize with monitored output
-        with self.agent_monitor.capture_output("System"):
-            # Initialize the supervisor components
-            await self.supervisor.initialize()
+        # Initialize the supervisor components
+        # NOTE: Removed output capture to prevent stdout/stderr interference
+        await self.supervisor.initialize()
 
         await self.ws_manager.send_success("Supervisor initialized")
 
