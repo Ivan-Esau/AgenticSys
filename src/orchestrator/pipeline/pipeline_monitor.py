@@ -105,7 +105,7 @@ class PipelineMonitor:
 
                 # Validate if agent is monitoring correct pipeline
                 if agent_name and not self.validate_agent_pipeline(agent_name, pipeline_id):
-                    print(f"[PIPELINE MONITOR] ❌ Wrong pipeline! Agent {agent_name} should not use #{pipeline_id}")
+                    print(f"[PIPELINE MONITOR] [FAIL] Wrong pipeline! Agent {agent_name} should not use #{pipeline_id}")
                     # Continue to find the right pipeline
                     await asyncio.sleep(check_interval_seconds)
                     continue
@@ -148,7 +148,7 @@ class PipelineMonitor:
                     return False, f"PIPELINE_UNKNOWN: Pipeline #{pipeline_id} has unknown status: {status}", {}
 
             except Exception as e:
-                print(f"[PIPELINE MONITOR] ⚠️ Error checking pipeline: {e}")
+                print(f"[PIPELINE MONITOR] [WARN] Error checking pipeline: {e}")
                 await asyncio.sleep(check_interval_seconds)
                 continue
 
@@ -169,7 +169,7 @@ class PipelineMonitor:
             return response
 
         except Exception as e:
-            print(f"[PIPELINE MONITOR] ⚠️ Error getting pipeline: {e}")
+            print(f"[PIPELINE MONITOR] [WARN] Error getting pipeline: {e}")
             return None
 
     async def _verify_pipeline_success(self, pipeline_id: str) -> Tuple[bool, Dict[str, Any]]:
@@ -306,7 +306,7 @@ class PipelineMonitor:
             return response or []
 
         except Exception as e:
-            print(f"[PIPELINE MONITOR] ⚠️ Error getting pipeline jobs: {e}")
+            print(f"[PIPELINE MONITOR] [WARN] Error getting pipeline jobs: {e}")
             return []
 
     async def _get_job_trace(self, job_id: str) -> Optional[str]:
@@ -325,7 +325,7 @@ class PipelineMonitor:
             return str(response) if response else None
 
         except Exception as e:
-            print(f"[PIPELINE MONITOR] ⚠️ Error getting job trace: {e}")
+            print(f"[PIPELINE MONITOR] [WARN] Error getting job trace: {e}")
             return None
 
     async def cancel_old_pipelines(self, branch: str, keep_pipeline_id: Optional[str] = None):
@@ -367,7 +367,7 @@ class PipelineMonitor:
 
                 # Skip if this is the pipeline we want to keep
                 if keep_pipeline_id and pipeline_id == str(keep_pipeline_id):
-                    print(f"[PIPELINE MONITOR] ✅ Keeping pipeline #{pipeline_id}")
+                    print(f"[PIPELINE MONITOR] [OK] Keeping pipeline #{pipeline_id}")
                     continue
 
                 # Cancel if it's still running
@@ -379,17 +379,17 @@ class PipelineMonitor:
                                 "pipeline_id": pipeline_id
                             })
                             canceled_count += 1
-                            print(f"[PIPELINE MONITOR] ❌ Canceled old pipeline #{pipeline_id}")
+                            print(f"[PIPELINE MONITOR] [FAIL] Canceled old pipeline #{pipeline_id}")
                         except Exception as e:
-                            print(f"[PIPELINE MONITOR] ⚠️ Failed to cancel pipeline #{pipeline_id}: {e}")
+                            print(f"[PIPELINE MONITOR] [WARN] Failed to cancel pipeline #{pipeline_id}: {e}")
 
             if canceled_count > 0:
                 print(f"[PIPELINE MONITOR] Canceled {canceled_count} old pipeline(s)")
             else:
-                print(f"[PIPELINE MONITOR] ✅ No old pipelines to cancel")
+                print(f"[PIPELINE MONITOR] [OK] No old pipelines to cancel")
 
         except Exception as e:
-            print(f"[PIPELINE MONITOR] ⚠️ Error canceling old pipelines: {e}")
+            print(f"[PIPELINE MONITOR] [WARN] Error canceling old pipelines: {e}")
 
     def set_current_pipeline(self, pipeline_id: str):
         """

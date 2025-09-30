@@ -70,7 +70,7 @@ class MenuSystem:
 
     def _get_operation_mode(self) -> Tuple[Optional[str], Optional[str], Optional[Path]]:
         """Get operation mode from user."""
-        self.display.print_section("🎯 OPERATION MODE")
+        self.display.print_section("[TARGET] OPERATION MODE")
         self.display.print_option("1", "Analyze Only", "No changes - understand project structure")
         self.display.print_option("2", "Full Implementation", "Implement all open issues")
         self.display.print_option("3", "Single Issue", "Implement one specific issue")
@@ -107,7 +107,7 @@ class MenuSystem:
     def _get_specific_issue(self) -> Optional[str]:
         """Get specific issue ID for single issue mode."""
         while True:
-            issue_id = input("\n🎯 Enter Issue ID to implement: ").strip()
+            issue_id = input("\n[TARGET] Enter Issue ID to implement: ").strip()
             if issue_id:
                 self.display.print_success(f"Will implement issue #{issue_id}")
                 return issue_id

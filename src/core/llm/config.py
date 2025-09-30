@@ -35,30 +35,30 @@ class Config:
     LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "deepseek")
     LLM_MODEL: str = os.getenv("LLM_MODEL", "deepseek-chat")
     LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0"))
-    LLM_MAX_RETRIES: int = int(os.getenv("LLM_MAX_RETRIES", "5"))
+    LLM_MAX_RETRIES: int = int(os.getenv("LLM_MAX_RETRIES", "2"))  # Reduced from 5 to avoid excessive retries
     LLM_STREAM_USAGE: bool = True
-    
+
     # Provider API Keys
     DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "")
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
-    
+
     # Provider Base URLs
     DEEPSEEK_BASE_URL: Optional[str] = os.getenv("DEEPSEEK_BASE_URL")
     OPENAI_BASE_URL: Optional[str] = os.getenv("OPENAI_BASE_URL")
     OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    
+
     # Runner Configuration
     AUTO_CREATE_RUNNER: bool = os.getenv("AUTO_CREATE_RUNNER", "false").lower() == "true"
     RUNNER_TAGS: list[str] = os.getenv("RUNNER_TAGS", "docker").split(",")
     RUNNER_NAME_PREFIX: str = os.getenv("RUNNER_NAME_PREFIX", "auto-runner")
-    
+
     # Agent Configuration
     DEFAULT_BRANCH: str = os.getenv("DEFAULT_BRANCH", "main")
     MAX_ISSUES_TO_SELECT: int = int(os.getenv("MAX_ISSUES_TO_SELECT", "5"))
     SHOW_TOKENS: bool = os.getenv("SHOW_TOKENS", "true").lower() == "true"
-    AGENT_RECURSION_LIMIT: int = int(os.getenv("AGENT_RECURSION_LIMIT", "200"))  # LangGraph recursion limit
+    AGENT_RECURSION_LIMIT: int = int(os.getenv("AGENT_RECURSION_LIMIT", "500"))  # High limit needed for e2e implementation of multiple issues
     
     @classmethod
     def get_mcp_url(cls) -> str:

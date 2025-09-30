@@ -110,7 +110,7 @@ class Supervisor:
             if task_type == "planning":
                 result = await self.executor.execute_planning_agent(**kwargs)
                 if result:
-                    print(f"[SUPERVISOR] ✅ Planning agent handoff complete - plan acquired")
+                    print(f"[SUPERVISOR] [OK] Planning agent handoff complete - plan acquired")
                     self.planning_manager.store_plan(result)
                 else:
                     print(f"[SUPERVISOR] Planning agent handoff failed")
@@ -118,21 +118,21 @@ class Supervisor:
             elif task_type == "coding":
                 result = await self.executor.execute_coding_agent(**kwargs)
                 if result:
-                    print(f"[SUPERVISOR] ✅ Coding agent handoff complete")
+                    print(f"[SUPERVISOR] [OK] Coding agent handoff complete")
                 else:
                     print(f"[SUPERVISOR] Coding agent handoff failed")
 
             elif task_type == "testing":
                 result = await self.executor.execute_testing_agent(**kwargs)
                 if result:
-                    print(f"[SUPERVISOR] ✅ Testing agent handoff complete")
+                    print(f"[SUPERVISOR] [OK] Testing agent handoff complete")
                 else:
                     print(f"[SUPERVISOR] Testing agent handoff failed")
 
             elif task_type == "review":
                 result = await self.executor.execute_review_agent(**kwargs)
                 if result:
-                    print(f"[SUPERVISOR] ✅ Review agent handoff complete")
+                    print(f"[SUPERVISOR] [OK] Review agent handoff complete")
                 else:
                     print(f"[SUPERVISOR] Review agent handoff failed")
 
@@ -145,7 +145,7 @@ class Supervisor:
             if result:
                 print(f"[SUPERVISOR] {task_type.upper()} task completed successfully")
             else:
-                print(f"[SUPERVISOR] ⚠️ {task_type.upper()} task completed with issues")
+                print(f"[SUPERVISOR] [WARN] {task_type.upper()} task completed with issues")
 
             return result
 
@@ -210,7 +210,7 @@ class Supervisor:
                 )
 
                 if not testing_result:
-                    print(f"[ISSUE #{issue_id}] ⚠️ Testing phase failed")
+                    print(f"[ISSUE #{issue_id}] [WARN] Testing phase failed")
                     # Analyze pipeline failures
                     await self.pipeline_manager.analyze_and_fix_pipeline_failures(issue_id, self.executor)
 
@@ -227,7 +227,7 @@ class Supervisor:
                 )
 
                 if review_result:
-                    print(f"[ISSUE #{issue_id}] ✅ Successfully implemented")
+                    print(f"[ISSUE #{issue_id}] [OK] Successfully implemented")
                     self.issue_manager.track_completed_issue(issue)
                     return True  # Success!
 
@@ -370,7 +370,7 @@ class Supervisor:
 
                 if success:
                     # Already tracked in implement_issue
-                    print(f"[SUCCESS] ✅ Issue #{issue_id} completed successfully")
+                    print(f"[SUCCESS] [OK] Issue #{issue_id} completed successfully")
                 else:
                     self.issue_manager.track_failed_issue(issue)
 
@@ -387,10 +387,10 @@ class Supervisor:
         stats = self.issue_manager.get_summary_stats()
         if stats['failed'] == 0 and stats['completed'] > 0:
             self.state = ExecutionState.COMPLETED
-            print("\n✅ ORCHESTRATION COMPLETED SUCCESSFULLY")
+            print("\n[OK] ORCHESTRATION COMPLETED SUCCESSFULLY")
         elif stats['completed'] > 0:
             self.state = ExecutionState.COMPLETED
-            print("\n⚠️ ORCHESTRATION COMPLETED WITH SOME FAILURES")
+            print("\n[WARN] ORCHESTRATION COMPLETED WITH SOME FAILURES")
         else:
             self.state = ExecutionState.FAILED
             print("\nORCHESTRATION FAILED")
@@ -410,12 +410,12 @@ class Supervisor:
         if stats['total_processed'] > 0:
             print(f"\nISSUE IMPLEMENTATION:")
             print(f"  Total Processed: {stats['total_processed']}")
-            print(f"  ✅ Completed: {stats['completed']}")
+            print(f"  [OK] Completed: {stats['completed']}")
             print(f"  Failed: {stats['failed']}")
             print(f"  Success Rate: {stats['success_rate']:.1f}%")
 
             if stats['completed_issues']:
-                print(f"\n✅ Completed Issues:")
+                print(f"\n[OK] Completed Issues:")
                 for issue in stats['completed_issues']:
                     print(f"    - #{issue.get('iid')}: {issue.get('title', 'Unknown')}")
 

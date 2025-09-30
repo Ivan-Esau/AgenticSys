@@ -48,14 +48,14 @@ class LLMMenu:
                 description = summary["description"]
                 is_valid = summary["valid"]
 
-                status_icon = "✅" if is_valid else "⚠️"
+                status_icon = "[OK]" if is_valid else "[WARN]"
                 provider_options.append((str(option_num), provider, display_name, description))
                 print(f"  {option_num}. {display_name} - {description} {status_icon}")
                 option_num += 1
 
         skip_option = str(option_num)
         provider_options.append((skip_option, "skip", "Skip", "Use current .env configuration"))
-        print(f"  {skip_option}. Skip - Use current .env configuration ✅")
+        print(f"  {skip_option}. Skip - Use current .env configuration [OK]")
 
         print()
         # Show warnings for invalid providers
@@ -109,7 +109,7 @@ class LLMMenu:
             self.display.print_success(f"Using default model for {provider}")
             return None
 
-        self.display.print_section(f"🎯 {provider.upper()} MODEL SELECTION")
+        self.display.print_section(f"[TARGET] {provider.upper()} MODEL SELECTION")
         print("  Available models:")
 
         model_list = []

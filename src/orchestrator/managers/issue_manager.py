@@ -61,7 +61,7 @@ class IssueManager:
             list_issues_tool = self._get_tool('list_issues')
 
             if not list_issues_tool:
-                print("[MCP] ⚠️ list_issues tool not found")
+                print("[MCP] [WARN] list_issues tool not found")
                 return []
 
             print("[MCP] Fetching issues via MCP server...")

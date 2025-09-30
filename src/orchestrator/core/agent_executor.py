@@ -51,7 +51,7 @@ class AgentExecutor:
         # First check for pipeline failures (critical for review agent)
         if CompletionMarkers.has_pipeline_failure(result):
             failure_type = CompletionMarkers.get_pipeline_failure_type(result)
-            print(f"[AGENT EXECUTOR] ❌ Pipeline failure detected: {failure_type}")
+            print(f"[AGENT EXECUTOR] [FAIL] Pipeline failure detected: {failure_type}")
 
             # Check if this is a network failure that should be retried
             if CompletionMarkers.should_retry_pipeline(result):
@@ -65,9 +65,9 @@ class AgentExecutor:
 
         # Log the detection reason for debugging
         if success:
-            print(f"[AGENT EXECUTOR] ✅ Success detected: {reason}")
+            print(f"[AGENT EXECUTOR] [OK] Success detected: {reason}")
         elif confidence > 0:
-            print(f"[AGENT EXECUTOR] ⚠️ Partial match: {reason}")
+            print(f"[AGENT EXECUTOR] [WARN] Partial match: {reason}")
 
         return success, confidence
 
@@ -191,7 +191,7 @@ class AgentExecutor:
             return success
             
         except Exception as e:
-            print(f"[AGENT EXECUTOR] ❌ Coding agent failed: {e}")
+            print(f"[AGENT EXECUTOR] [FAIL] Coding agent failed: {e}")
             self._end_execution_tracking(execution_id, "error", str(e))
             return False
     
@@ -233,7 +233,7 @@ class AgentExecutor:
             return success
             
         except Exception as e:
-            print(f"[AGENT EXECUTOR] ❌ Testing agent failed: {e}")
+            print(f"[AGENT EXECUTOR] [FAIL] Testing agent failed: {e}")
             self._end_execution_tracking(execution_id, "error", str(e))
             return False
     
@@ -273,7 +273,7 @@ class AgentExecutor:
 
                     # Validate it matches Testing Agent's pipeline
                     if self.testing_pipeline_id and pipeline_id != self.testing_pipeline_id:
-                        print(f"[AGENT EXECUTOR] ⚠️ WARNING: Pipeline mismatch!")
+                        print(f"[AGENT EXECUTOR] [WARN] WARNING: Pipeline mismatch!")
                         print(f"[AGENT EXECUTOR] Testing Agent: #{self.testing_pipeline_id}")
                         print(f"[AGENT EXECUTOR] Review Agent: #{pipeline_id}")
                         # This is a critical error - wrong pipeline!
@@ -285,7 +285,7 @@ class AgentExecutor:
                     # Look for any pipeline status indicators (more flexible)
                     pipeline_indicators = [
                         "pipeline.*success", "pipeline.*passed", "pipeline.*completed",
-                        "✅.*success", "test job.*success", "build job.*success",
+                        "[OK].*success", "test job.*success", "build job.*success",
                         "pipeline status.*success", "both.*jobs.*passed"
                     ]
 
@@ -295,24 +295,24 @@ class AgentExecutor:
                     )
 
                     if has_pipeline_confirmation:
-                        print(f"[AGENT EXECUTOR] ✅ Review agent confirmed pipeline success and merge completion")
+                        print(f"[AGENT EXECUTOR] [OK] Review agent confirmed pipeline success and merge completion")
                     else:
                         # Check if this is likely a legitimate completion by looking for detailed pipeline info
                         if any(phrase in result.lower() for phrase in ["test job", "build job", "pipeline", "jobs.*passed"]):
-                            print(f"[AGENT EXECUTOR] ✅ Review agent provided pipeline details - accepting completion")
+                            print(f"[AGENT EXECUTOR] [OK] Review agent provided pipeline details - accepting completion")
                         else:
-                            print(f"[AGENT EXECUTOR] ⚠️ WARNING: Review claimed success but no pipeline details found")
-                            print(f"[AGENT EXECUTOR] ❌ Blocking merge - pipeline verification missing")
+                            print(f"[AGENT EXECUTOR] [WARN] WARNING: Review claimed success but no pipeline details found")
+                            print(f"[AGENT EXECUTOR] [FAIL] Blocking merge - pipeline verification missing")
                             success = False
                 else:
-                    print(f"[AGENT EXECUTOR] ⚠️ WARNING: Review claimed completion but no merge confirmation")
+                    print(f"[AGENT EXECUTOR] [WARN] WARNING: Review claimed completion but no merge confirmation")
                     success = False
 
             self._end_execution_tracking(execution_id, "success" if success else "failed")
             return success
             
         except Exception as e:
-            print(f"[AGENT EXECUTOR] ❌ Review agent failed: {e}")
+            print(f"[AGENT EXECUTOR] [FAIL] Review agent failed: {e}")
             self._end_execution_tracking(execution_id, "error", str(e))
             return False
     
@@ -322,7 +322,7 @@ class AgentExecutor:
         No more hardcoded patterns - uses intelligent detection strategies.
         """
         if not result:
-            print("[AGENT EXECUTOR] ❌ No result from planning agent")
+            print("[AGENT EXECUTOR] [FAIL] No result from planning agent")
             return False
         
         print(f"[AGENT EXECUTOR] Analyzing planning agent output...")
@@ -336,14 +336,14 @@ class AgentExecutor:
         
         # Planning agent completed successfully
         if success:
-            print("[AGENT EXECUTOR] ✅ Planning analysis completed")
+            print("[AGENT EXECUTOR] [OK] Planning analysis completed")
 
             # Store the planning analysis result for supervisor use
             if result and not self.current_plan:
                 self.current_plan = result  # Store the full planning analysis text
                 print("[AGENT EXECUTOR] Stored planning analysis for issue prioritization")
 
-            print("[AGENT EXECUTOR] ✅ Planning agent execution successful")
+            print("[AGENT EXECUTOR] [OK] Planning agent execution successful")
             return True
         
         # Fallback: Try JSON extraction even if detection failed
@@ -353,17 +353,17 @@ class AgentExecutor:
                 if json_block:
                     plan = json.loads(json_block)
                     self.current_plan = plan
-                    print(f"[AGENT EXECUTOR] ✅ Planning succeeded (JSON plan extracted as fallback)")
+                    print(f"[AGENT EXECUTOR] [OK] Planning succeeded (JSON plan extracted as fallback)")
                     return True
             except Exception as e:
-                print(f"[AGENT EXECUTOR] ⚠️ JSON extraction fallback failed: {e}")
+                print(f"[AGENT EXECUTOR] [WARN] JSON extraction fallback failed: {e}")
         
-        print(f"[AGENT EXECUTOR] ❌ Planning validation failed")
+        print(f"[AGENT EXECUTOR] [FAIL] Planning validation failed")
         print(f"[AGENT EXECUTOR] Agent output length: {len(result)} chars")
         
         # Diagnostic info for debugging
         if len(result) < 200:
-            print("[AGENT EXECUTOR] ⚠️ Suspiciously short output - possible tool execution failure")
+            print("[AGENT EXECUTOR] [WARN] Suspiciously short output - possible tool execution failure")
             print(f"[AGENT EXECUTOR] Output preview: {repr(result[:100])}")
         
         return False

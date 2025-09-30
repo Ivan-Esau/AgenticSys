@@ -27,7 +27,10 @@
       "Bash(del test_mcp_projects.py test_api_projects.py)",
       "Bash(start http://localhost:8000)",
       "Bash(/bashes)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(pip install:*)",
+      "Bash(del \"C:\\Users\\esaui\\Desktop\\PythonProjects\\AgenticSys\\test_coverage_pipeline.py\")",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

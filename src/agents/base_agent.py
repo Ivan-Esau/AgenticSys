@@ -98,7 +98,7 @@ class BaseAgent:
             return str(result) if result else None
             
         except Exception as e:
-            print(f"[{self.name.upper()}] ❌ Agent execution failed: {e}")
+            print(f"[{self.name.upper()}] [FAIL] Agent execution failed: {e}")
             return None
     
     async def _stream_run(self, inputs: dict, show_tokens: bool) -> Optional[str]:

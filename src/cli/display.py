@@ -48,13 +48,13 @@ class Display:
     @staticmethod
     def print_status(message: str, success: bool = True):
         """Print a status message."""
-        icon = "✓" if success else "❌"
+        icon = "✓" if success else "[FAIL]"
         print(f"{icon} {message}")
 
     @staticmethod
     def print_error(message: str):
         """Print an error message."""
-        print(f"❌ {message}")
+        print(f"[FAIL] {message}")
 
     @staticmethod
     def print_success(message: str):
@@ -64,7 +64,7 @@ class Display:
     @staticmethod
     def print_warning(message: str):
         """Print a warning message."""
-        print(f"⚠️  {message}")
+        print(f"[WARN]  {message}")
 
     @staticmethod
     def print_info(message: str):
