@@ -18,7 +18,8 @@ class StreamManager:
         self.final_content = None
         self.sentence_buffer = ""  # Buffer to accumulate tokens into sentences
         self.last_flush_time = time.time()
-        self.flush_interval = 0.3  # Flush every 0.3 seconds
+        self.flush_interval = 0.5  # Flush every 0.5 seconds (reduced frequency)
+        self.token_count = 0  # Track tokens for time check throttling
     
     async def handle_stream_events(
         self,
@@ -47,6 +48,8 @@ class StreamManager:
                     self._handle_tool_start(data)
                 elif kind == "on_tool_end":
                     self._handle_tool_end(data)
+                elif kind == "on_tool_error":
+                    self._handle_tool_error(data)
 
                 # Handle token streaming
                 elif kind == "on_chat_model_stream":
@@ -95,10 +98,25 @@ class StreamManager:
     def _handle_tool_end(self, data: Dict[str, Any]) -> None:
         """Handle tool end events."""
         tool_name = data.get("name", "")
-        
+
         if tool_name:
+            # Check for errors first
+            output = data.get("output", {})
+            error = None
+
+            # Extract error from different possible formats
+            if isinstance(output, dict):
+                error = output.get("error") or output.get("message")
+            elif isinstance(output, str) and ("error" in output.lower() or "failed" in output.lower()):
+                error = output
+
+            # Show error if present
+            if error:
+                print(f"    [FAIL] {tool_name}: {error}")
+                return
+
             # Show completion status for specific tools
-            if tool_name in ['create_file', 'update_file']:
+            if tool_name in ['create_file', 'update_file', 'create_or_update_file']:
                 print(f"    [DONE] File operation completed")
             elif tool_name == 'create_branch':
                 print(f"    [DONE] Branch created")
@@ -106,11 +124,21 @@ class StreamManager:
                 print(f"    [DONE] Merge request created")
             elif tool_name == 'merge_merge_request':
                 print(f"    [DONE] Merge request merged!")
-            elif tool_name in ['get_project', 'get_repository_tree', 'list_issues']:
-                print(f"    [DONE] Data retrieved")
-    
+            elif tool_name in ['get_project', 'get_repository_tree', 'list_issues', 'get_file_contents', 'list_branches', 'list_merge_requests']:
+                print(f"    [DONE] {tool_name} completed")
+
+    def _handle_tool_error(self, data: Dict[str, Any]) -> None:
+        """Handle tool error events."""
+        tool_name = data.get("name", "")
+        error = data.get("error", "Unknown error")
+
+        # Flush any buffered output before showing error
+        self._flush_remaining_buffer()
+
+        print(f"    [ERROR] {tool_name} failed: {error}")
+
     def _handle_token_stream(self, data: Dict[str, Any]) -> None:
-        """Handle token streaming events with sentence buffering."""
+        """Handle token streaming events with sentence buffering - OPTIMIZED."""
         chunk = data.get("chunk", {})
 
         if hasattr(chunk, "content"):
@@ -128,38 +156,29 @@ class StreamManager:
             else:
                 # Add token to sentence buffer
                 self.sentence_buffer += content
-                current_time = time.time()
+                self.token_count += 1
 
-                # Check if we should flush the buffer
+                # Simplified flush logic for better responsiveness
                 should_flush = False
+                buffer_len = len(self.sentence_buffer)
 
-                # Look for sentence endings
-                sentence_endings = ['.', '!', '?', '\n', ':', ';']
-                if any(ending in self.sentence_buffer for ending in sentence_endings):
-                    # Find the last sentence ending
-                    last_ending_pos = -1
-                    for ending in sentence_endings:
-                        pos = self.sentence_buffer.rfind(ending)
-                        if pos > last_ending_pos:
-                            last_ending_pos = pos
-
-                    # Flush if we have a complete sentence
-                    if last_ending_pos >= 0:
-                        content_after = self.sentence_buffer[last_ending_pos + 1:].strip()
-                        if not content_after or len(content_after) < 5:
-                            should_flush = True
-
-                # Also flush based on time or length thresholds
-                if (current_time - self.last_flush_time > self.flush_interval or
-                    len(self.sentence_buffer) >= 100 or
-                    current_time - self.last_flush_time > 1.0):  # Emergency timeout
+                if '\n' in content:  # Immediate flush on newline
                     should_flush = True
+                elif buffer_len >= 100:  # Force flush on moderate buffer
+                    should_flush = True
+                else:
+                    # Check time periodically (every 10 tokens to reduce syscalls but stay responsive)
+                    if self.token_count % 10 == 0:
+                        current_time = time.time()
+                        if current_time - self.last_flush_time > self.flush_interval:
+                            should_flush = True
+                            self.last_flush_time = current_time
 
                 # Flush the buffer
                 if should_flush and self.sentence_buffer.strip():
                     print(self.sentence_buffer, end="", flush=True)
                     self.sentence_buffer = ""
-                    self.last_flush_time = current_time
+                    self.last_flush_time = time.time()
 
     def _flush_remaining_buffer(self) -> None:
         """Flush any remaining content in the sentence buffer."""
