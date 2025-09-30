@@ -19,12 +19,50 @@ class PipelineManager:
         self.default_branch = default_branch
         self.pipeline_config = None
 
+    def _normalize_tech_stack(self, tech_stack: Dict[str, str]) -> Dict[str, str]:
+        """
+        Normalize tech stack format from Web GUI to PipelineConfig format.
+        Web GUI format: {'language': 'Java', 'framework': None, ...}
+        PipelineConfig format: {'backend': 'java', 'frontend': 'none'}
+        """
+        normalized = {}
+
+        # Map 'language' to 'backend' and convert to lowercase
+        if 'language' in tech_stack:
+            language = tech_stack['language']
+            if language:
+                normalized['backend'] = language.lower()
+
+        # Map framework/frontend
+        if 'framework' in tech_stack:
+            framework = tech_stack.get('framework')
+            if framework and framework.lower() != 'none':
+                normalized['frontend'] = framework.lower()
+            else:
+                normalized['frontend'] = 'none'
+
+        # If backend wasn't set, check if it's already in the dict
+        if 'backend' not in normalized and 'backend' in tech_stack:
+            normalized['backend'] = tech_stack['backend'].lower()
+
+        # Default to 'none' for frontend if not set
+        if 'frontend' not in normalized:
+            normalized['frontend'] = 'none'
+
+        # Default to 'python' for backend if not set
+        if 'backend' not in normalized:
+            normalized['backend'] = 'python'
+
+        return normalized
+
     async def initialize_pipeline_config(self, tech_stack: Dict[str, str] = None):
         """Initialize pipeline configuration and create basic pipeline if needed."""
         try:
             # Use provided tech stack if available, otherwise detect from project files
             if tech_stack:
                 print(f"[PIPELINE CONFIG] Using provided tech stack: {tech_stack}")
+                # Convert Web GUI format to PipelineConfig format
+                tech_stack = self._normalize_tech_stack(tech_stack)
             else:
                 tech_stack = await self.detect_project_tech_stack()
 
