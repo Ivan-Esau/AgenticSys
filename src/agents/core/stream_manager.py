@@ -4,6 +4,7 @@ Handles token streaming and progress display.
 """
 
 from typing import Optional, Dict, Any, AsyncGenerator
+import time
 
 
 class StreamManager:
@@ -11,53 +12,62 @@ class StreamManager:
     Manages streaming output and progress display for agents.
     Handles both token streaming and tool execution progress.
     """
-    
+
     def __init__(self, agent_name: str):
         self.agent_name = agent_name
         self.final_content = None
+        self.sentence_buffer = ""  # Buffer to accumulate tokens into sentences
+        self.last_flush_time = time.time()
+        self.flush_interval = 0.3  # Flush every 0.3 seconds
     
     async def handle_stream_events(
-        self, 
-        stream: AsyncGenerator, 
+        self,
+        stream: AsyncGenerator,
         show_tokens: bool = True
     ) -> Optional[str]:
         """
         Handle streaming events from the agent and display progress.
-        
+
         Args:
             stream: Async generator of stream events
             show_tokens: Whether to show token streaming
-            
+
         Returns:
             Final content from the stream
         """
         final_content = None
-        
+
         try:
             async for event in stream:
                 kind = event.get("event", "")
                 data = event.get("data", {})
-                
+
                 # Handle tool execution progress
                 if kind == "on_tool_start":
                     self._handle_tool_start(data)
                 elif kind == "on_tool_end":
                     self._handle_tool_end(data)
-                
+
                 # Handle token streaming
                 elif kind == "on_chat_model_stream":
                     if show_tokens:
                         self._handle_token_stream(data)
-                
+
                 # Capture final output
                 elif kind == "on_chat_model_end":
+                    # Flush any remaining buffered content
+                    if show_tokens:
+                        self._flush_remaining_buffer()
                     final_content = self._extract_final_content(data)
-                    
+
         except Exception as e:
             # Log streaming errors and let the agent fall back to non-streaming
             print(f"[STREAM] Stream error: {e}")
             raise
-        
+        finally:
+            # Always flush remaining buffer when stream ends
+            self._flush_remaining_buffer()
+
         return final_content
     
     def _handle_tool_start(self, data: Dict[str, Any]) -> None:
@@ -97,14 +107,14 @@ class StreamManager:
                 print(f"    [DONE] Data retrieved")
     
     def _handle_token_stream(self, data: Dict[str, Any]) -> None:
-        """Handle token streaming events."""
+        """Handle token streaming events with sentence buffering."""
         chunk = data.get("chunk", {})
-        
+
         if hasattr(chunk, "content"):
             content = chunk.content
         else:
             content = chunk.get("content") if isinstance(chunk, dict) else None
-        
+
         if content:
             # Filter out verbose JSON blocks and show only important updates
             if "```json" in content or '"issues": [' in content or '"implementation_steps"' in content:
@@ -113,7 +123,46 @@ class StreamManager:
                     print("[Generating orchestration plan...]", end="", flush=True)
                     self._json_suppressed = True
             else:
-                print(content, end="", flush=True)
+                # Add token to sentence buffer
+                self.sentence_buffer += content
+                current_time = time.time()
+
+                # Check if we should flush the buffer
+                should_flush = False
+
+                # Look for sentence endings
+                sentence_endings = ['.', '!', '?', '\n', ':', ';']
+                if any(ending in self.sentence_buffer for ending in sentence_endings):
+                    # Find the last sentence ending
+                    last_ending_pos = -1
+                    for ending in sentence_endings:
+                        pos = self.sentence_buffer.rfind(ending)
+                        if pos > last_ending_pos:
+                            last_ending_pos = pos
+
+                    # Flush if we have a complete sentence
+                    if last_ending_pos >= 0:
+                        content_after = self.sentence_buffer[last_ending_pos + 1:].strip()
+                        if not content_after or len(content_after) < 5:
+                            should_flush = True
+
+                # Also flush based on time or length thresholds
+                if (current_time - self.last_flush_time > self.flush_interval or
+                    len(self.sentence_buffer) >= 100 or
+                    current_time - self.last_flush_time > 1.0):  # Emergency timeout
+                    should_flush = True
+
+                # Flush the buffer
+                if should_flush and self.sentence_buffer.strip():
+                    print(self.sentence_buffer, end="", flush=True)
+                    self.sentence_buffer = ""
+                    self.last_flush_time = current_time
+
+    def _flush_remaining_buffer(self) -> None:
+        """Flush any remaining content in the sentence buffer."""
+        if self.sentence_buffer.strip():
+            print(self.sentence_buffer, end="", flush=True)
+            self.sentence_buffer = ""
     
     def _extract_final_content(self, data: Dict[str, Any]) -> Optional[str]:
         """Extract final content from model end event."""
