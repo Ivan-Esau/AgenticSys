@@ -61,6 +61,38 @@ Agents must work within their defined scope and NEVER modify system infrastructu
 - Bypassing failed pipelines
 - Merging with failing tests
 
+## Agent Workflow
+
+### Correct Implementation Flow
+
+1. **Planning Phase**
+   - Planning Agent analyzes issues and creates project structure
+   - Creates `planning-structure-*` branch if needed
+   - Does NOT wait for pipeline or create merge requests
+   - Completes with "PLANNING_PHASE_COMPLETE"
+
+2. **Planning Review Phase** (Critical - was missing!)
+   - Review Agent reviews planning-structure branch
+   - WAITS for pipeline to be GREEN
+   - Merges planning branch to main/master
+   - Only proceeds if pipeline passes
+
+3. **Implementation Phase**
+   - For each issue:
+     - Coding Agent implements on feature branch
+     - Testing Agent adds tests
+     - Review Agent waits for GREEN pipeline and merges
+
+### Pipeline Responsibility Matrix
+
+| Agent | Can Create Pipeline | Must Wait for Pipeline | Can Merge |
+|-------|-------------------|----------------------|-----------|
+| Planning | ❌ No | ❌ No | ❌ No |
+| Coding | ❌ No | ❌ No | ❌ No |
+| Testing | ❌ No | ✅ Yes (monitoring) | ❌ No |
+| Review | ❌ No | ✅ Yes (before merge) | ✅ Yes |
+| System | ✅ Yes | N/A | N/A |
+
 ## Failure Handling Protocol
 
 ### When Pipeline Fails (Red)

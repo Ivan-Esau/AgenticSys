@@ -292,6 +292,42 @@ class Supervisor:
             await self.show_summary()
             return
 
+        # Phase 1.5: Review and Merge Planning Work (if branch exists)
+        # Check if planning-structure branch exists and needs merging
+        try:
+            branches = await self.mcp_manager.run_tool("list_branches", {
+                "project_id": str(self.project_id)
+            })
+
+            # Check if planning-structure branch exists
+            planning_branch_exists = False
+            if branches and isinstance(branches, list):
+                for branch in branches:
+                    if branch.get('name', '').startswith('planning-structure'):
+                        planning_branch_exists = True
+                        planning_branch = branch.get('name')
+                        break
+
+            if planning_branch_exists:
+                print("\n" + "="*60)
+                print("PHASE 1.5: REVIEW PLANNING WORK")
+                print("="*60)
+                print(f"[REVIEW] Found planning branch: {planning_branch}")
+                print("[REVIEW] Delegating to Review Agent for merge...")
+
+                # Execute review agent for planning work
+                review_success = await self.route_task(
+                    "REVIEW",
+                    {"work_branch": planning_branch, "issue_id": "planning", "type": "planning"}
+                )
+
+                if not review_success:
+                    print("[WARNING] Planning review failed, but continuing...")
+                else:
+                    print("[REVIEW] Planning work reviewed and merged successfully")
+        except Exception as e:
+            print(f"[WARNING] Could not check for planning branch: {str(e)}")
+
         # Phase 2: Implementation Preparation
         print("\n" + "="*60)
         print("PHASE 2: IMPLEMENTATION PREPARATION")
