@@ -32,6 +32,10 @@ class OutputCapture:
         if self.original_stdout:
             self.original_stdout.write(text)
 
+        # Filter out unwanted messages immediately
+        if "Session termination failed" in text:
+            return  # Skip this message entirely
+
         # Add text to sentence buffer
         self.sentence_buffer += text
         current_time = time.time()
@@ -40,8 +44,12 @@ class OutputCapture:
         break_points = ['.', '!', '?', '\n', ':', ';']
         should_send = False
 
+        # Immediate send on newline (for system messages and headers)
+        if '\n' in self.sentence_buffer:
+            should_send = True
+
         # Send if we have natural break points and some content
-        if any(bp in self.sentence_buffer for bp in break_points):
+        elif any(bp in self.sentence_buffer for bp in break_points):
             # More lenient: send if we have any break point and reasonable length
             if len(self.sentence_buffer.strip()) >= 20:
                 should_send = True
@@ -53,7 +61,7 @@ class OutputCapture:
             should_send = True
 
         # Emergency send if nothing sent for too long
-        if current_time - self.last_send_time > 2.0:  # 2 second maximum delay
+        if current_time - self.last_send_time > 1.5:  # 1.5 second maximum delay
             should_send = True
 
         if should_send and self.sentence_buffer.strip():

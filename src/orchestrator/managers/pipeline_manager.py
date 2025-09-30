@@ -129,7 +129,7 @@ class PipelineManager:
                 })
 
                 if existing_pipeline:
-                    print("[PIPELINE] ✅ Basic pipeline already exists - skipping creation")
+                    print("[PIPELINE] [OK] Basic pipeline already exists - skipping creation")
                     return
 
             except Exception:
@@ -154,10 +154,10 @@ class PipelineManager:
                 "branch": self.default_branch
             })
 
-            print(f"[PIPELINE] ✅ Created basic {self.pipeline_config.backend} pipeline (.gitlab-ci.yml)")
+            print(f"[PIPELINE] [OK] Created basic {self.pipeline_config.backend} pipeline (.gitlab-ci.yml)")
 
         except Exception as e:
-            print(f"[PIPELINE] ⚠️ Failed to create basic pipeline: {e}")
+            print(f"[PIPELINE] [WARN] Failed to create basic pipeline: {e}")
             print("[PIPELINE] Project will continue without CI/CD pipeline")
 
     def get_pipeline_instructions(self) -> str:
@@ -235,9 +235,9 @@ class PipelineManager:
                 status = pipeline_info.get("status", "unknown")
 
                 if status == "success":
-                    print(f"[PIPELINE] ✅ Pipeline passed - all tests green")
+                    print(f"[PIPELINE] [OK] Pipeline passed - all tests green")
                 elif status == "failed":
-                    print(f"[PIPELINE] ❌ Pipeline failed - review needed")
+                    print(f"[PIPELINE] [FAIL] Pipeline failed - review needed")
                 elif status == "running":
                     print(f"[PIPELINE] Pipeline still running")
                 else:

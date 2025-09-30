@@ -74,10 +74,13 @@ class StreamManager:
         """Handle tool start events."""
         tool_name = data.get("name", "")
         tool_input = data.get("input", {})
-        
+
         if tool_name:
-            print(f"  [TOOL] {tool_name}")
-            
+            # Flush any remaining sentence buffer before showing tool usage
+            self._flush_remaining_buffer()
+
+            print(f"\n  [TOOL] {tool_name}")
+
             # Show specific context for certain tools
             if tool_name == 'get_file_contents':
                 file_path = tool_input.get('file', '')
