@@ -74,22 +74,22 @@ COMPREHENSIVE INFORMATION-AWARE REVIEW PROCESS:
        ```
        pipeline_response = get_latest_pipeline_for_ref(ref=work_branch)
        CURRENT_PIPELINE_ID = pipeline_response['id']  # e.g., "4259"
-       print(f"[REVIEW] Verifying pipeline: #{CURRENT_PIPELINE_ID}")
+       print(f"[REVIEW] Verifying pipeline: #{{CURRENT_PIPELINE_ID}}")
        # THIS MUST BE THE TESTING AGENT'S PIPELINE - NOT AN OLDER ONE!
        ```
      * Monitor ONLY this specific pipeline using: get_pipeline(pipeline_id=CURRENT_PIPELINE_ID)
      * Pipeline status MUST be "success" - not "failed", "canceled", "pending", or "running"
      * If pipeline is missing: WAIT for it to be created (up to 15 minutes)
      * If pipeline is running: WAIT and monitor every 30 seconds
-     * Print status updates: "⏳ Pipeline #{CURRENT_PIPELINE_ID} status: running (Y minutes elapsed)"
+     * Print status updates: "[WAIT] Pipeline #{{CURRENT_PIPELINE_ID}} status: running (Y minutes elapsed)"
    - FORBIDDEN PIPELINE PRACTICES (WILL CAUSE TASK FAILURE):
-     * ❌ NEVER use old pipeline results from before recent commits
-     * ❌ NEVER say "previous pipeline #4255 was successful" when current is #4259
-     * ❌ NEVER say "Found successful pipeline from 2 hours ago" as validation
-     * ❌ NEVER merge if current pipeline is pending/running
-     * ❌ NEVER create new pipelines to bypass waiting
-     * ❌ NEVER use get_pipelines() to find "any successful pipeline"
-     * ❌ NEVER accept a different pipeline ID than CURRENT_PIPELINE_ID
+     * [FAIL] NEVER use old pipeline results from before recent commits
+     * [FAIL] NEVER say "previous pipeline #4255 was successful" when current is #4259
+     * [FAIL] NEVER say "Found successful pipeline from 2 hours ago" as validation
+     * [FAIL] NEVER merge if current pipeline is pending/running
+     * [FAIL] NEVER create new pipelines to bypass waiting
+     * [FAIL] NEVER use get_pipelines() to find "any successful pipeline"
+     * [FAIL] NEVER accept a different pipeline ID than CURRENT_PIPELINE_ID
    - PIPELINE STATE ANALYSIS: Get latest pipeline for the source branch
      * Use get_latest_pipeline_for_ref(ref=work_branch) to find CURRENT pipeline
      * If pipeline is running: WAIT and monitor (check every 30s, max 20 minutes)
@@ -116,7 +116,7 @@ COMPREHENSIVE INFORMATION-AWARE REVIEW PROCESS:
      * Pipeline completed within reasonable time (< 10 minutes)
    - ARTIFACT VALIDATION: Verify test outputs and coverage reports exist:
      * Check job traces for "TEST SUMMARY" and "BUILD SUMMARY" sections
-     * Look for "✅ Coverage report generated" and "✅ Test reports generated" messages
+     * Look for "[OK] Coverage report generated" and "[OK] Test reports generated" messages
      * Verify artifact upload success (no "ERROR: No files to upload" messages)
      * For Java projects: Confirm JaCoCo reports and Surefire test results exist
      * Validate no "Maven test failed" or dependency resolution errors occurred
@@ -202,7 +202,7 @@ When you have completed review of the CURRENT ISSUE ONLY, you MUST end with:
 
 "REVIEW_PHASE_COMPLETE: Issue #[INSERT_ACTUAL_ISSUE_NUMBER] merged and closed successfully. Pipeline success confirmed with [test/build job details]. Ready for next issue."
 
-Example: "REVIEW_PHASE_COMPLETE: Issue #123 merged and closed successfully. Pipeline success confirmed with test job ✅ Success and build job ✅ Success. Ready for next issue."
+Example: "REVIEW_PHASE_COMPLETE: Issue #123 merged and closed successfully. Pipeline success confirmed with test job [OK] Success and build job [OK] Success. Ready for next issue."
 
 CRITICAL: Always include pipeline job status details (test job, build job) to confirm pipeline verification.
 

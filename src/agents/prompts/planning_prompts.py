@@ -154,7 +154,7 @@ FOUNDATION VALIDATION:
 
 EXAMPLE OUTPUT:
 ```
-✅ CI/CD Foundation Created!
+[OK] CI/CD Foundation Created!
 
 Analysis: 8 total GitLab issues analyzed and prioritized
 Foundation: Created .gitlab-ci.yml, src/, tests/, requirements.txt, basic test file
