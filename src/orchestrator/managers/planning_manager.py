@@ -89,16 +89,38 @@ class PlanningManager:
         prioritized = []
         issue_map = {str(issue.get('iid')): issue for issue in all_issues}
 
-        # Pattern 1: "Phase 1: Issues #1, #5"
-        phase_pattern = r'Phase \d+.*?Issue[s]?\s*[#:]?\s*([#\d,\s]+)'
-        phases = re.findall(phase_pattern, plan_text, re.IGNORECASE)
+        # Pattern 0: "ISSUE PRIORITIZATION:" section (NEW - highest priority)
+        prioritization_match = re.search(
+            r'ISSUE PRIORITIZATION:.*?(?:\n\d+\..*?Issue \d+.*?)+',
+            plan_text,
+            re.IGNORECASE | re.DOTALL
+        )
 
-        for phase in phases:
-            # Extract issue numbers from each phase
-            issue_numbers = re.findall(r'#?(\d+)', phase)
-            for num in issue_numbers:
-                if num in issue_map and issue_map[num] not in prioritized:
+        if prioritization_match:
+            print("[PLANNING] Found ISSUE PRIORITIZATION section")
+            prioritization_section = prioritization_match.group()
+            # Extract lines like "1. Issue 1 - Project creation"
+            priority_lines = re.findall(r'\d+\.\s+Issue (\d+)', prioritization_section)
+
+            for num in priority_lines:
+                if num in issue_map:
                     prioritized.append(issue_map[num])
+                    print(f"[PLANNING] Priority order: Issue #{num}")
+
+            if prioritized:
+                print(f"[PLANNING] Extracted {len(prioritized)} issues from priority section")
+
+        # Pattern 1: "Phase 1: Issues #1, #5"
+        if not prioritized:
+            phase_pattern = r'Phase \d+.*?Issue[s]?\s*[#:]?\s*([#\d,\s]+)'
+            phases = re.findall(phase_pattern, plan_text, re.IGNORECASE)
+
+            for phase in phases:
+                # Extract issue numbers from each phase
+                issue_numbers = re.findall(r'#?(\d+)', phase)
+                for num in issue_numbers:
+                    if num in issue_map and issue_map[num] not in prioritized:
+                        prioritized.append(issue_map[num])
 
         # Pattern 2: "Issue #X" mentions in order
         if not prioritized:
