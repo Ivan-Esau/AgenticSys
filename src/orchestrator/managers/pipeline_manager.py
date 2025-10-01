@@ -19,6 +19,11 @@ class PipelineManager:
         self.default_branch = default_branch
         self.pipeline_config = None
 
+        # Pipeline optimization settings
+        self.MAX_PENDING_TIME = 120  # 2 minutes max for pending state only
+        self.MAX_RUNNING_TIME = 600  # 10 minutes max for running state (actual execution)
+        self.CHECK_INTERVAL = 10  # Check every 10 seconds instead of 30
+
     def _normalize_tech_stack(self, tech_stack: Dict[str, str]) -> Dict[str, str]:
         """
         Normalize tech stack format from Web GUI to PipelineConfig format.
@@ -59,8 +64,14 @@ class PipelineManager:
 
         return normalized
 
-    async def initialize_pipeline_config(self, tech_stack: Dict[str, str] = None):
-        """Initialize pipeline configuration and create basic pipeline if needed."""
+    async def initialize_pipeline_config(self, tech_stack: Dict[str, str] = None, mode: str = 'minimal'):
+        """
+        Initialize pipeline configuration and create basic pipeline if needed.
+
+        Args:
+            tech_stack: Technology stack configuration
+            mode: Pipeline mode - 'minimal' (default), 'standard', or 'full'
+        """
         try:
             # Use provided tech stack if available, otherwise detect from project files
             if tech_stack:
@@ -70,8 +81,9 @@ class PipelineManager:
             else:
                 tech_stack = await self.detect_project_tech_stack()
 
-            # Initialize pipeline config
-            self.pipeline_config = PipelineConfig(tech_stack)
+            # Initialize pipeline config with mode (default: minimal for agent workflow)
+            self.pipeline_config = PipelineConfig(tech_stack, mode=mode)
+            print(f"[PIPELINE CONFIG] Mode: {mode} (2-stage: test + build)" if mode == 'minimal' else f"[PIPELINE CONFIG] Mode: {mode}")
 
             print(f"[PIPELINE CONFIG] Initialized for {tech_stack.get('backend', 'unknown')} backend")
             if tech_stack.get('frontend') != 'none':
@@ -82,8 +94,8 @@ class PipelineManager:
 
         except Exception as e:
             print(f"[PIPELINE CONFIG] Failed to initialize: {e}")
-            # Use default Python config as fallback
-            self.pipeline_config = PipelineConfig({'backend': 'python', 'frontend': 'none'})
+            # Use default Python config as fallback with minimal mode
+            self.pipeline_config = PipelineConfig({'backend': 'python', 'frontend': 'none'}, mode=mode)
 
     async def detect_project_tech_stack(self) -> Dict[str, str]:
         """Detect project tech stack from repository files."""
@@ -348,3 +360,144 @@ class PipelineManager:
             if hasattr(tool, 'name') and tool.name == tool_name:
                 return tool
         return None
+
+    async def cancel_obsolete_pipelines(self, branch: str = None, keep_latest: int = 1):
+        """
+        Cancel obsolete pipelines to prevent queue buildup.
+        Keeps only the latest pipeline(s) running.
+        """
+        try:
+            get_pipelines_tool = self._get_tool('get_pipelines')
+            cancel_pipeline_tool = self._get_tool('cancel_pipeline')
+
+            if not get_pipelines_tool:
+                return
+
+            params = {"project_id": self.project_id, "per_page": 20}
+            if branch:
+                params["ref"] = branch
+
+            pipelines = await get_pipelines_tool.ainvoke(params)
+
+            # Skip the most recent pipelines
+            pipelines_to_cancel = pipelines[keep_latest:] if len(pipelines) > keep_latest else []
+
+            canceled_count = 0
+            for pipeline in pipelines_to_cancel:
+                status = pipeline.get("status", "")
+                if status in ["pending", "running", "created"]:
+                    pipeline_id = pipeline.get("id")
+
+                    if cancel_pipeline_tool:
+                        try:
+                            await cancel_pipeline_tool.ainvoke({
+                                "project_id": self.project_id,
+                                "pipeline_id": pipeline_id
+                            })
+                            canceled_count += 1
+                            print(f"[PIPELINE] Canceled obsolete pipeline #{pipeline_id}")
+                        except:
+                            pass
+
+            if canceled_count > 0:
+                print(f"[PIPELINE] Canceled {canceled_count} obsolete pipelines")
+
+        except Exception as e:
+            print(f"[PIPELINE] Failed to cancel pipelines: {e}")
+
+    async def wait_for_pipeline_smart(self, pipeline_id: str) -> Dict[str, Any]:
+        """
+        Smart pipeline waiting with state-specific timeouts.
+        - Pending state: 2 minute timeout (if runners are unavailable)
+        - Running state: 10 minute timeout (actual execution time)
+        """
+        import asyncio
+        from datetime import datetime
+
+        start_time = datetime.now()
+        last_status = None
+        pending_start_time = None
+        running_start_time = None
+
+        get_pipeline_tool = self._get_tool('get_single_pipeline')
+        get_jobs_tool = self._get_tool('get_pipeline_jobs')
+
+        if not get_pipeline_tool:
+            return {"status": "error", "message": "Pipeline tools not available"}
+
+        while True:
+            elapsed_total = (datetime.now() - start_time).total_seconds()
+
+            try:
+                # Get current pipeline status
+                pipeline = await get_pipeline_tool.ainvoke({
+                    "project_id": self.project_id,
+                    "pipeline_id": pipeline_id
+                })
+
+                status = pipeline.get("status", "unknown")
+
+                # Track state transitions
+                if status != last_status:
+                    print(f"[PIPELINE] Pipeline #{pipeline_id}: {status}")
+
+                    if status == "pending" and pending_start_time is None:
+                        pending_start_time = datetime.now()
+                        print(f"[PIPELINE] Pipeline entered pending state (max {self.MAX_PENDING_TIME}s)")
+
+                    elif status == "running":
+                        if running_start_time is None:
+                            running_start_time = datetime.now()
+                            print(f"[PIPELINE] Pipeline started running (max {self.MAX_RUNNING_TIME}s)")
+                        pending_start_time = None  # Reset pending timer
+
+                    last_status = status
+
+                # Check if complete
+                if status in ["success", "failed", "canceled", "skipped"]:
+                    return {"status": status, "pipeline": pipeline}
+
+                # State-specific timeout checks
+                if status == "pending" and pending_start_time:
+                    pending_duration = (datetime.now() - pending_start_time).total_seconds()
+                    if pending_duration > self.MAX_PENDING_TIME:
+                        print(f"[PIPELINE] Pending timeout after {pending_duration:.0f}s - no runners available")
+                        return {
+                            "status": "timeout_pending",
+                            "message": f"Pipeline stuck in pending state for {pending_duration:.0f}s",
+                            "recommendation": "GitLab runners may be unavailable or busy"
+                        }
+
+                elif status == "running" and running_start_time:
+                    running_duration = (datetime.now() - running_start_time).total_seconds()
+                    if running_duration > self.MAX_RUNNING_TIME:
+                        print(f"[PIPELINE] Running timeout after {running_duration:.0f}s")
+                        return {
+                            "status": "timeout_running",
+                            "message": f"Pipeline exceeded maximum execution time ({running_duration:.0f}s)",
+                            "recommendation": "Tests may be hanging or taking too long"
+                        }
+
+                # Check for stuck jobs in pending state
+                if status == "pending" and get_jobs_tool:
+                    jobs = await get_jobs_tool.ainvoke({
+                        "project_id": self.project_id,
+                        "pipeline_id": pipeline_id
+                    })
+
+                    running_jobs = [j for j in jobs if j.get("status") == "running"]
+                    if running_jobs:
+                        print(f"[PIPELINE] {len(running_jobs)} jobs running despite 'pending' status")
+                        # Pipeline status may be cached, continue waiting
+
+            except Exception as e:
+                print(f"[PIPELINE] Error checking pipeline: {e}")
+
+            # Wait before next check
+            await asyncio.sleep(self.CHECK_INTERVAL)
+
+    async def wait_for_pipeline(self, pipeline_id: str, timeout: int = None) -> Dict[str, Any]:
+        """
+        Backward compatible wait method with smart timeout handling.
+        """
+        return await self.wait_for_pipeline_smart(pipeline_id)
