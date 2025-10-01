@@ -16,11 +16,12 @@ async def run(
     plan_json: Optional[Dict] = None,
     tools: List[Any] = None,
     show_tokens: bool = True,
-    pipeline_config: dict = None
+    pipeline_config: dict = None,
+    output_callback=None
 ):
     """
     Run review agent with clean modular architecture.
-    
+
     Args:
         project_id: GitLab project ID
         work_branch: Branch to review and merge
@@ -28,15 +29,16 @@ async def run(
         tools: Tools available to the agent
         show_tokens: Whether to show token streaming
         pipeline_config: Pipeline configuration for tech stack
-        
+        output_callback: Optional callback for WebSocket output
+
     Returns:
         Agent response content
     """
     if tools is None:
         tools = []
-    
+
     # Create agent using factory with pipeline config
-    agent = create_review_agent(tools, project_id, pipeline_config)
+    agent = create_review_agent(tools, project_id, pipeline_config, output_callback)
     
     # Execute with clean input format
     content = await agent.run(dedent(f"""

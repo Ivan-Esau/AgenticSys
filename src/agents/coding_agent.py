@@ -19,7 +19,8 @@ async def run(
     show_tokens: bool = True,
     fix_mode: bool = False,
     error_context: str = "",
-    pipeline_config: dict = None
+    pipeline_config: dict = None,
+    output_callback=None
 ):
     """
     Run coding agent with clean modular architecture.
@@ -34,6 +35,7 @@ async def run(
         fix_mode: Whether running in pipeline fix mode
         error_context: Error context for fix mode
         pipeline_config: Pipeline configuration for tech stack
+        output_callback: Optional callback for WebSocket output
 
     Returns:
         Agent response content
@@ -42,7 +44,7 @@ async def run(
         tools = []
 
     # Create agent using factory with pipeline config
-    agent = create_coding_agent(tools, project_id, pipeline_config)
+    agent = create_coding_agent(tools, project_id, pipeline_config, output_callback)
     
     # Format issues for agent
     issues_list = " | ".join(issues) if issues else ""

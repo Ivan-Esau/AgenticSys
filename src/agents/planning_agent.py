@@ -15,7 +15,8 @@ async def run(
     apply: bool = False,
     branch_hint: str = None,
     show_tokens: bool = True,
-    pipeline_config: dict = None
+    pipeline_config: dict = None,
+    output_callback=None
 ):
     """
     Run planning agent with clean modular architecture.
@@ -27,18 +28,19 @@ async def run(
         branch_hint: Optional branch naming hint
         show_tokens: Whether to show token streaming
         pipeline_config: Pipeline configuration for tech stack
+        output_callback: Optional callback for WebSocket output
 
     Returns:
         Agent response content
     """
     # Create agent using factory with pipeline config
-    agent = create_planning_agent(tools, project_id, pipeline_config)
-    
+    agent = create_planning_agent(tools, project_id, pipeline_config, output_callback)
+
     # Execute with clean input format
     content = await agent.run(dedent(f"""
         project_id={project_id}
         apply={"true" if apply else "false"}
         branch_hint={branch_hint or ""}
     """), show_tokens=show_tokens)
-    
+
     return content
