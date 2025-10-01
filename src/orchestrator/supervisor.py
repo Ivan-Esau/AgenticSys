@@ -84,6 +84,9 @@ class Supervisor:
             # Store pipeline config in executor for agents
             self.executor.pipeline_config = self.pipeline_manager.pipeline_config
 
+            # Store pipeline manager reference for smart pipeline handling
+            self.executor.pipeline_manager = self.pipeline_manager
+
         except Exception as e:
             print(f"[SUPERVISOR] Initialization failed: {e}")
             raise

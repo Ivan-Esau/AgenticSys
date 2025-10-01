@@ -20,6 +20,8 @@ class CompletionMarkers:
     # Additional success patterns for flexible detection
     SUCCESS_PATTERNS = {
         "planning": [
+            "baseline_verified",  # NEW: Must verify baseline pipeline
+            "pipeline.*passed successfully",  # NEW: Pipeline confirmation required
             "planning status: complete",
             "planning complete",
             "orchestration plan",
