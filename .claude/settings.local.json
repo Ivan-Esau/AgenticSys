@@ -31,7 +31,9 @@
       "Bash(pip install:*)",
       "Bash(del \"C:\\Users\\esaui\\Desktop\\PythonProjects\\AgenticSys\\test_coverage_pipeline.py\")",
       "Bash(grep:*)",
-      "Bash(del test_pipeline_generation.py test_unknown_pipeline.py)"
+      "Bash(del test_pipeline_generation.py test_unknown_pipeline.py)",
+      "Bash(del \"C:\\Users\\esaui\\Desktop\\PythonProjects\\AgenticSys\\src\\orchestrator\\pipeline\\pipeline_optimizer.py\")",
+      "WebFetch(domain:langchain-ai.github.io)"
     ],
     "deny": [],
     "ask": []
