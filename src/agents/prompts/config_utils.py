@@ -10,6 +10,7 @@ def extract_tech_stack(pipeline_config: Any) -> Dict[str, str]:
     """
     Extract tech stack information from pipeline config.
     Handles both new (attribute) and old (dictionary) formats.
+    Also handles Web GUI format with 'language', 'framework', 'testing' fields.
 
     Args:
         pipeline_config: Pipeline configuration object or dict
@@ -20,7 +21,8 @@ def extract_tech_stack(pipeline_config: Any) -> Dict[str, str]:
     tech_stack = {
         "backend": "python",
         "frontend": "Not specified",
-        "database": "Not specified"
+        "database": "Not specified",
+        "testing": "Not specified"
     }
 
     if not pipeline_config:
@@ -33,19 +35,38 @@ def extract_tech_stack(pipeline_config: Any) -> Dict[str, str]:
             tech_stack["frontend"] = pipeline_config.frontend
         if hasattr(pipeline_config, 'database'):
             tech_stack["database"] = pipeline_config.database
+        if hasattr(pipeline_config, 'testing'):
+            tech_stack["testing"] = pipeline_config.testing
 
-    # Handle old format (dictionary from pipeline)
+    # Handle dictionary formats
     elif isinstance(pipeline_config, dict):
-        if 'tech_stack' in pipeline_config:
+        # Web GUI format: {'language': 'Java', 'framework': 'Spring', 'testing': 'JUnit', ...}
+        if 'language' in pipeline_config:
+            tech_stack["backend"] = pipeline_config.get('language', 'python')
+            tech_stack["frontend"] = pipeline_config.get('framework', 'Not specified')
+            tech_stack["database"] = pipeline_config.get('database', 'Not specified')
+            tech_stack["testing"] = pipeline_config.get('testing', 'Not specified')
+        # Old tech_stack nested format
+        elif 'tech_stack' in pipeline_config:
             old_stack = pipeline_config['tech_stack']
-            tech_stack["backend"] = old_stack.get('backend', 'python')
-            tech_stack["frontend"] = old_stack.get('frontend', 'Not specified')
-            tech_stack["database"] = old_stack.get('database', 'Not specified')
-        # Direct config dict format
+            # Check for Web GUI format inside tech_stack
+            if 'language' in old_stack:
+                tech_stack["backend"] = old_stack.get('language', 'python')
+                tech_stack["frontend"] = old_stack.get('framework', 'Not specified')
+                tech_stack["database"] = old_stack.get('database', 'Not specified')
+                tech_stack["testing"] = old_stack.get('testing', 'Not specified')
+            else:
+                # Standard format
+                tech_stack["backend"] = old_stack.get('backend', 'python')
+                tech_stack["frontend"] = old_stack.get('frontend', 'Not specified')
+                tech_stack["database"] = old_stack.get('database', 'Not specified')
+                tech_stack["testing"] = old_stack.get('testing', 'Not specified')
+        # Direct config dict format (backend/frontend keys)
         elif 'backend' in pipeline_config:
             tech_stack["backend"] = pipeline_config.get('backend', 'python')
             tech_stack["frontend"] = pipeline_config.get('frontend', 'Not specified')
             tech_stack["database"] = pipeline_config.get('database', 'Not specified')
+            tech_stack["testing"] = pipeline_config.get('testing', 'Not specified')
 
     return tech_stack
 
@@ -62,51 +83,58 @@ def get_tech_stack_prompt(pipeline_config: Any, agent_type: str = "generic") -> 
         Formatted tech stack prompt section
     """
     tech_stack = extract_tech_stack(pipeline_config)
-
-    if tech_stack["backend"] == "python" and tech_stack["frontend"] == "Not specified":
-        # Likely using defaults, no explicit user choice
-        return ""
-
     backend = tech_stack["backend"].upper()
+    testing = tech_stack["testing"]
 
     messages = {
         "planning": f"""
-CONFIGURED TECH STACK (USE THIS - DO NOT DETECT FROM EXISTING FILES):
-- Backend: {backend}
+CONFIGURED TECH STACK (USER-SELECTED - USE THIS EXACTLY):
+- Language/Backend: {backend}
+- Testing Framework: {testing}
 - Frontend: {tech_stack["frontend"]}
 - Database: {tech_stack["database"]}
 
-IMPORTANT: The user has explicitly chosen {backend} as the backend.
-Even if existing files suggest Python or another language, you MUST plan for {backend}.
+⚠️ CRITICAL: The user explicitly selected {backend} and {testing}.
+⚠️ You MUST create a {backend} project structure, NOT Python or any other language.
+⚠️ Example for {backend}:
+   - Java → pom.xml, src/main/java/, src/test/java/ with JUnit tests
+   - Python → requirements.txt, src/, tests/ with pytest
+   - JavaScript → package.json, src/, __tests__/ with Jest
+⚠️ DO NOT auto-detect tech stack from existing files - use the configured values above.
 """,
         "coding": f"""
-CONFIGURED TECH STACK (USE THIS - DO NOT DETECT FROM EXISTING FILES):
-- Backend: {backend}
+CONFIGURED TECH STACK (USER-SELECTED - USE THIS EXACTLY):
+- Language/Backend: {backend}
+- Testing Framework: {testing}
 - Frontend: {tech_stack["frontend"]}
 - Database: {tech_stack["database"]}
 
-IMPORTANT: The user has explicitly chosen {backend} as the backend.
-You MUST implement code in {backend}, even if existing files suggest Python or another language.
+⚠️ CRITICAL: Implement ALL code in {backend}, NOT Python or any other language.
+⚠️ Use {testing} for testing.
+⚠️ Do not create Python files if the language is Java, or vice versa.
 """,
         "testing": f"""
-CONFIGURED TECH STACK (USE THIS - DO NOT DETECT FROM EXISTING FILES):
-- Backend: {backend}
+CONFIGURED TECH STACK (USER-SELECTED):
+- Language/Backend: {backend}
+- Testing Framework: {testing}
 - Frontend: {tech_stack["frontend"]}
 - Database: {tech_stack["database"]}
 
-IMPORTANT: Write tests for {backend} code, matching the user's chosen stack.
+⚠️ IMPORTANT: Write tests using {testing} for {backend} code.
 """,
         "review": f"""
-CONFIGURED TECH STACK (USER-SPECIFIED):
-- Backend: {backend}
+CONFIGURED TECH STACK (USER-SELECTED):
+- Language/Backend: {backend}
+- Testing Framework: {testing}
 - Frontend: {tech_stack["frontend"]}
 - Database: {tech_stack["database"]}
 
-IMPORTANT: This project uses {backend} as specified by the user.
+⚠️ IMPORTANT: This project uses {backend} with {testing} as specified by the user.
 """,
         "generic": f"""
 CONFIGURED TECH STACK:
-- Backend: {backend}
+- Language/Backend: {backend}
+- Testing Framework: {testing}
 - Frontend: {tech_stack["frontend"]}
 - Database: {tech_stack["database"]}
 """
