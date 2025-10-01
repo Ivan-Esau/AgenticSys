@@ -3,7 +3,7 @@ Clean modular BaseAgent.
 Lightweight coordinator using specialized modules for caching, streaming, and tool management.
 """
 
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Callable, Awaitable
 from src.core.llm.config import Config
 from src.core.llm.llm_config import make_model
 # Removed broken state tools and cache systems
@@ -18,19 +18,21 @@ class BaseAgent:
     Clean modular base agent using specialized components.
     Coordinates caching, streaming, and tool management through dedicated modules.
     """
-    
+
     def __init__(
-        self, 
-        name: str, 
-        system_prompt: str, 
-        tools: List[Any], 
-        model=None, 
-        project_id: Optional[str] = None
+        self,
+        name: str,
+        system_prompt: str,
+        tools: List[Any],
+        model=None,
+        project_id: Optional[str] = None,
+        output_callback: Optional[Callable[[str], Awaitable[None]]] = None
     ):
         self.name = name
         self.system_prompt = system_prompt
         self.project_id = project_id
-        
+        self.output_callback = output_callback  # Optional WebSocket output callback
+
         # Initialize modular components (removed broken caching)
         self.stream_manager = StreamManager(name)
         
@@ -101,26 +103,91 @@ class BaseAgent:
             print(f"[{self.name.upper()}] [FAIL] Agent execution failed: {e}")
             return None
     
+    async def _output(self, text: str, end: str = "", flush: bool = True):
+        """
+        Send output to WebSocket (if callback provided) or console.
+
+        Args:
+            text: Text to output
+            end: String to append after text (default: empty)
+            flush: Whether to flush output (default: True)
+        """
+        full_text = text + end
+
+        if self.output_callback:
+            # Send to WebSocket via callback
+            try:
+                await self.output_callback(full_text)
+            except Exception as e:
+                # Fall back to console if WebSocket fails
+                print(full_text, end="", flush=flush)
+        else:
+            # Normal console output
+            print(full_text, end="", flush=flush)
+
     async def _stream_run(self, inputs: dict, show_tokens: bool) -> Optional[str]:
         """
-        Run agent with streaming using the stream manager.
-        
+        Run agent with streaming using efficient astream() method with stream_mode="messages".
+
         Args:
             inputs: Input dictionary for the agent
             show_tokens: Whether to show token streaming
-            
+
         Returns:
             Final content from streaming or None if failed
         """
         try:
-            # Create async stream
-            stream = self.agent.astream_events(inputs, version="v2", config={"recursion_limit": Config.AGENT_RECURSION_LIMIT})
-            
-            # Handle stream events using stream manager
-            final_content = await self.stream_manager.handle_stream_events(stream, show_tokens)
-            
-            return final_content
-            
+            # ✅ FIXED: Use astream() with stream_mode="messages" for sentence-level streaming
+            # Accumulate tokens into sentences for better readability
+            final_content = []
+            sentence_buffer = []  # Buffer tokens until we hit sentence boundary
+
+            async for token, metadata in self.agent.astream(
+                inputs,
+                config={"recursion_limit": Config.AGENT_RECURSION_LIMIT},
+                stream_mode="messages"  # Stream LLM tokens as they're generated
+            ):
+                # Extract content from token
+                content = None
+                if hasattr(token, "content"):
+                    content = token.content
+                elif isinstance(token, dict) and "content" in token:
+                    content = token["content"]
+
+                if content:
+                    content_str = str(content)
+                    sentence_buffer.append(content_str)
+                    final_content.append(content_str)
+
+                    # Send when we hit sentence boundaries or get enough tokens
+                    # Sentence boundaries: . ! ? followed by space, or newline
+                    should_send = (
+                        content_str.endswith('. ') or
+                        content_str.endswith('.\n') or
+                        content_str.endswith('! ') or
+                        content_str.endswith('?\n') or
+                        content_str.endswith('? ') or
+                        '\n' in content_str or
+                        len(sentence_buffer) >= 15  # Send every ~15 tokens as fallback
+                    )
+
+                    if should_send and show_tokens:
+                        # Send accumulated sentence
+                        sentence = "".join(sentence_buffer)
+                        await self._output(sentence)
+                        sentence_buffer = []  # Reset buffer
+
+            # Send any remaining content
+            if show_tokens and sentence_buffer:
+                await self._output("".join(sentence_buffer))
+
+            # Add final newline
+            if show_tokens and final_content:
+                await self._output("\n")
+
+            # Return accumulated content
+            return "".join(final_content) if final_content else None
+
         except Exception:
             # Let the caller handle fallback
             raise
