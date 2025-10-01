@@ -12,7 +12,7 @@ from .core import Router, PerformanceTracker, AgentExecutor
 from .managers import IssueManager, PipelineManager, PlanningManager
 
 # Export pipeline components
-from .pipeline import PipelineConfig, PipelineMonitor
+from .pipeline import PipelineConfig
 
 # Export integrations
 from .integrations import MCPIntegration
@@ -30,7 +30,6 @@ __all__ = [
     "PipelineManager",
     "PlanningManager",
     "PipelineConfig",
-    "PipelineMonitor",
     "MCPIntegration",
     "CompletionMarkers"
 ]
