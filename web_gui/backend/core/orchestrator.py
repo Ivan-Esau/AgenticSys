@@ -139,9 +139,22 @@ class SystemOrchestrator:
         if config.get('min_coverage'):
             self.supervisor.min_coverage = config.get('min_coverage')
 
+        # Create output callback for agent streaming
+        async def output_callback(text: str):
+            """Send agent output to WebSocket"""
+            await self.ws_manager.send_agent_output(
+                self.current_agent or "Agent",
+                text,
+                "info"
+            )
+
+        # Initialize supervisor and inject output callback into executor
+        await self.supervisor.initialize()
+        if self.supervisor.executor:
+            self.supervisor.executor.output_callback = output_callback
+
         # Execute supervisor (like CLI does)
-        # NOTE: Removed output capture to prevent stdout/stderr interference with tools
-        # Output capture was causing async/sync issues and breaking tool results
+        # NOTE: No longer using stdout capture - agents now send directly via WebSocket callback
         await self.supervisor.execute(mode=supervisor_mode, specific_issue=specific_issue)
 
         await self.ws_manager.send_success("Supervisor execution completed")
