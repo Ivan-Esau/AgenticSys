@@ -25,23 +25,27 @@ class AgentExecutor:
     Coordinates the execution of individual agents.
     Uses flexible success detection for robust operation.
     """
-    
-    def __init__(self, project_id: str, tools: List[Any]):
+
+    def __init__(self, project_id: str, tools: List[Any], output_callback=None):
         self.project_id = project_id
         self.tools = tools
-        
+        self.output_callback = output_callback  # Optional WebSocket callback
+
         # Execution tracking
         self.current_executions = {}
         self.execution_history = []
         self.current_plan = None
-        
+
         # Pipeline configuration (set by supervisor)
         self.pipeline_config = None
         self.debugging_context = None
+        self.pipeline_manager = None  # Will be set by supervisor
 
-        # Pipeline tracking between agents (KEY FIX)
-        self.testing_pipeline_id = None  # Store Testing Agent's pipeline ID
-        self.current_pipeline_id = None  # Current pipeline being monitored
+        # Pipeline tracking between agents (CRITICAL FIX for PIPELINE_WAITING_FIX.md)
+        # Testing Agent creates the pipeline for the feature branch
+        # Review Agent MUST validate the SAME pipeline (not a different/older one)
+        self.testing_pipeline_id = None  # Testing Agent's pipeline ID (source of truth)
+        self.current_pipeline_id = None  # Review Agent's pipeline ID (must match above!)
     
     def _check_agent_success(self, agent_type: str, result: str) -> tuple[bool, float]:
         """
@@ -108,11 +112,16 @@ class AgentExecutor:
         Execute planning agent with robust error handling and retry logic.
         """
         execution_id = self._start_execution_tracking("planning", {"apply": apply})
-        
+
         try:
             print("\n[AGENT EXECUTOR] Executing Planning Agent...")
             print(f"[AGENT EXECUTOR] Mode: {'Implementation' if apply else 'Analysis'}")
-            
+
+            # Cancel all pending pipelines for clean baseline
+            if self.pipeline_manager:
+                print("[AGENT EXECUTOR] Canceling obsolete pipelines for clean baseline...")
+                await self.pipeline_manager.cancel_obsolete_pipelines(keep_latest=0)
+
             # Execute planning agent with timeout protection
             result = await asyncio.wait_for(
                 planning_agent.run(
@@ -120,7 +129,8 @@ class AgentExecutor:
                     tools=self.tools,
                     apply=apply,
                     show_tokens=show_tokens,
-                    pipeline_config=self.pipeline_config.config if self.pipeline_config else None
+                    pipeline_config=self.pipeline_config.config if self.pipeline_config else None,
+                    output_callback=self.output_callback
                 ),
                 timeout=600  # 10 minute timeout
             )
@@ -181,7 +191,8 @@ class AgentExecutor:
                 work_branch=branch,
                 plan_json=self.current_plan,
                 show_tokens=show_tokens,
-                pipeline_config=self.pipeline_config.config if self.pipeline_config else None
+                pipeline_config=self.pipeline_config.config if self.pipeline_config else None,
+                output_callback=self.output_callback
             )
             
             # Check for success
@@ -205,10 +216,15 @@ class AgentExecutor:
         Execute testing agent for a specific issue.
         """
         execution_id = self._start_execution_tracking("testing", {"issue_id": issue.get("iid"), "branch": branch})
-        
+
         try:
             print(f"\n[AGENT EXECUTOR] Executing Testing Agent for Issue #{issue.get('iid')}...")
-            
+
+            # Cancel obsolete pipelines before starting tests
+            if self.pipeline_manager:
+                print("[AGENT EXECUTOR] Canceling obsolete pipelines before testing...")
+                await self.pipeline_manager.cancel_obsolete_pipelines(branch=branch, keep_latest=1)
+
             # Execute testing agent
             result = await testing_agent.run(
                 project_id=self.project_id,
@@ -216,7 +232,8 @@ class AgentExecutor:
                 work_branch=branch,
                 plan_json=self.current_plan,
                 show_tokens=show_tokens,
-                pipeline_config=self.pipeline_config.config if self.pipeline_config else None
+                pipeline_config=self.pipeline_config.config if self.pipeline_config else None,
+                output_callback=self.output_callback
             )
             
             # Check for success
@@ -258,7 +275,8 @@ class AgentExecutor:
                 work_branch=branch,
                 plan_json=self.current_plan,
                 show_tokens=show_tokens,
-                pipeline_config=self.pipeline_config.config if self.pipeline_config else None
+                pipeline_config=self.pipeline_config.config if self.pipeline_config else None,
+                output_callback=self.output_callback
             )
             
             # Check for success - CRITICAL: Must verify pipeline passed
@@ -271,12 +289,18 @@ class AgentExecutor:
                     self.current_pipeline_id = pipeline_id
                     print(f"[AGENT EXECUTOR] Review Agent monitoring pipeline: #{pipeline_id}")
 
-                    # Validate it matches Testing Agent's pipeline
-                    if self.testing_pipeline_id and pipeline_id != self.testing_pipeline_id:
-                        print(f"[AGENT EXECUTOR] [WARN] WARNING: Pipeline mismatch!")
-                        print(f"[AGENT EXECUTOR] Testing Agent: #{self.testing_pipeline_id}")
-                        print(f"[AGENT EXECUTOR] Review Agent: #{pipeline_id}")
-                        # This is a critical error - wrong pipeline!
+                    # CRITICAL: Validate it matches Testing Agent's pipeline
+                    if self.testing_pipeline_id:
+                        if pipeline_id != self.testing_pipeline_id:
+                            print(f"[AGENT EXECUTOR] [FAIL] CRITICAL: Pipeline mismatch detected!")
+                            print(f"[AGENT EXECUTOR] Testing Agent created: #{self.testing_pipeline_id}")
+                            print(f"[AGENT EXECUTOR] Review Agent monitoring: #{pipeline_id}")
+                            print(f"[AGENT EXECUTOR] [FAIL] Blocking merge - cannot validate wrong pipeline!")
+                            # This is a critical error - BLOCK the merge!
+                            self._end_execution_tracking(execution_id, "failed", "Pipeline ID mismatch")
+                            return False
+                        else:
+                            print(f"[AGENT EXECUTOR] [OK] Pipeline ID verified: #{pipeline_id} matches Testing Agent")
 
             # Additional validation for review agent - must not have pipeline failures
             if success and "REVIEW_PHASE_COMPLETE" in (result or ""):
@@ -319,24 +343,64 @@ class AgentExecutor:
     async def _process_planning_result(self, result: str) -> bool:
         """
         Process planning agent result using flexible success detection.
-        No more hardcoded patterns - uses intelligent detection strategies.
+        REQUIRES baseline verification for planning agent.
         """
         if not result:
             print("[AGENT EXECUTOR] [FAIL] No result from planning agent")
             return False
-        
+
         print(f"[AGENT EXECUTOR] Analyzing planning agent output...")
-        
+
+        # CRITICAL: Check for BASELINE_VERIFIED signal (mandatory for planning)
+        has_baseline_verified = "baseline_verified" in result.lower()
+
+        # CRITICAL: Verify pipeline actually PASSED (not just "running")
+        import re
+        pipeline_passed = False
+        if has_baseline_verified:
+            # Check for "passed successfully" or "status: success" or "completed: success"
+            passed_patterns = [
+                r"pipeline.*#\d+.*passed successfully",
+                r"pipeline.*#\d+.*status.*success",
+                r"pipeline.*#\d+.*completed.*success"
+            ]
+            for pattern in passed_patterns:
+                if re.search(pattern, result.lower()):
+                    pipeline_passed = True
+                    break
+
+            # Reject if says "running" or "pending"
+            if re.search(r"pipeline.*#\d+.*is running", result.lower()):
+                print("[AGENT EXECUTOR] [FAIL] Pipeline is still RUNNING - not SUCCESS!")
+                pipeline_passed = False
+            if re.search(r"pipeline.*#\d+.*is pending", result.lower()):
+                print("[AGENT EXECUTOR] [FAIL] Pipeline is still PENDING - not SUCCESS!")
+                pipeline_passed = False
+
         # Check for success using simple detection
         success, confidence = self._check_agent_success("planning", result)
-        
+
         print(f"[AGENT EXECUTOR] Detection Results:")
         print(f"  - Success: {success}")
         print(f"  - Confidence: {confidence:.2%}")
-        
-        # Planning agent completed successfully
-        if success:
-            print("[AGENT EXECUTOR] [OK] Planning analysis completed")
+        print(f"  - Baseline Verified: {has_baseline_verified}")
+        print(f"  - Pipeline Passed: {pipeline_passed}")
+
+        # Planning agent MUST have verified baseline
+        if success and not has_baseline_verified:
+            print("[AGENT EXECUTOR] [FAIL] Planning completed WITHOUT baseline verification!")
+            print("[AGENT EXECUTOR] [FAIL] This violates the mandatory pipeline verification requirement")
+            return False
+
+        # Planning agent MUST wait for pipeline to PASS
+        if success and has_baseline_verified and not pipeline_passed:
+            print("[AGENT EXECUTOR] [FAIL] Planning claimed baseline verified but pipeline NOT passed!")
+            print("[AGENT EXECUTOR] [FAIL] Pipeline must show 'success' status, not 'running' or 'pending'")
+            return False
+
+        # Planning agent completed successfully WITH baseline verification
+        if success and has_baseline_verified and pipeline_passed:
+            print("[AGENT EXECUTOR] [OK] Planning analysis completed WITH baseline verification")
 
             # Store the planning analysis result for supervisor use
             if result and not self.current_plan:
@@ -400,6 +464,28 @@ class AgentExecutor:
         # For now, just log the failure for supervisor to handle
         
     
+    def reset_pipeline_tracking(self):
+        """
+        Reset pipeline tracking for new issue.
+        Called by supervisor before starting work on a new issue.
+        """
+        if self.testing_pipeline_id or self.current_pipeline_id:
+            print(f"[AGENT EXECUTOR] Resetting pipeline tracking (previous: Testing #{self.testing_pipeline_id}, Review #{self.current_pipeline_id})")
+        self.testing_pipeline_id = None
+        self.current_pipeline_id = None
+
+    def get_pipeline_tracking_status(self) -> Dict[str, Any]:
+        """Get current pipeline tracking status for debugging."""
+        return {
+            "testing_pipeline_id": self.testing_pipeline_id,
+            "current_pipeline_id": self.current_pipeline_id,
+            "pipelines_match": (
+                self.testing_pipeline_id == self.current_pipeline_id
+                if self.testing_pipeline_id and self.current_pipeline_id
+                else None
+            )
+        }
+
     def get_execution_summary(self) -> Dict[str, Any]:
         """Get execution summary."""
         return {
@@ -407,5 +493,6 @@ class AgentExecutor:
             "current_executions": len(self.current_executions),
             "completed_executions": len(self.execution_history),
             "has_plan": self.current_plan is not None,
-            "planned_issues": len(self.current_plan.get("issues", [])) if isinstance(self.current_plan, dict) else 0
+            "planned_issues": len(self.current_plan.get("issues", [])) if isinstance(self.current_plan, dict) else 0,
+            "pipeline_tracking": self.get_pipeline_tracking_status()
         }
