@@ -18,9 +18,9 @@ src/orchestrator/
 │
 ├── managers/               # Business logic managers
 │   ├── __init__.py
-│   ├── issue_manager.py    # GitLab issue management
-│   ├── pipeline_manager.py # CI/CD pipeline operations
-│   └── planning_manager.py # Planning and prioritization
+│   ├── issue_manager.py       # GitLab issue management
+│   ├── tech_stack_detector.py # Technology stack detection
+│   └── planning_manager.py    # Planning and prioritization
 │
 ├── pipeline/              # Pipeline-specific components
 │   ├── __init__.py
@@ -55,11 +55,11 @@ src/orchestrator/
   - Feature branch creation
   - Issue prioritization
 
-- **pipeline_manager.py**:
-  - Pipeline configuration
-  - Tech stack detection
-  - Pipeline monitoring
-  - Failure analysis
+- **tech_stack_detector.py**:
+  - Tech stack detection from user input
+  - Tech stack inference from file patterns
+  - Validation of tech stack configuration
+  - NO hardcoded MCP tool dependencies
 
 - **planning_manager.py**:
   - Planning execution with retry

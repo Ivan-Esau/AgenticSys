@@ -9,7 +9,7 @@ from .supervisor import Supervisor, run_supervisor
 from .core import Router, PerformanceTracker, AgentExecutor
 
 # Export managers
-from .managers import IssueManager, PipelineManager, PlanningManager
+from .managers import IssueManager, PlanningManager
 
 # Export pipeline components
 from .pipeline import PipelineConfig
@@ -27,7 +27,6 @@ __all__ = [
     "PerformanceTracker",
     "AgentExecutor",
     "IssueManager",
-    "PipelineManager",
     "PlanningManager",
     "PipelineConfig",
     "MCPIntegration",
