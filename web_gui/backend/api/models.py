@@ -15,22 +15,12 @@ class ExecutionMode(str, Enum):
     ANALYSIS_ONLY = "analysis"
 
 
-class TechStack(BaseModel):
-    """Technology stack configuration"""
-    language: str = Field(default="Python", description="Primary programming language")
-    framework: Optional[str] = Field(default=None, description="Web/app framework")
-    database: Optional[str] = Field(default=None, description="Database system")
-    testing: Optional[str] = Field(default="pytest", description="Testing framework")
-    deployment: Optional[str] = Field(default=None, description="Deployment platform")
-    ci_cd: Optional[str] = Field(default="GitLab CI", description="CI/CD system")
-
-
 class SystemConfig(BaseModel):
     """System configuration request"""
     project_id: str = Field(..., description="GitLab project ID")
     mode: ExecutionMode = Field(default=ExecutionMode.IMPLEMENT_ALL)
     specific_issue: Optional[int] = Field(default=None, description="Specific issue number for single issue mode")
-    tech_stack: Optional[TechStack] = Field(default=None, description="Technology stack configuration")
+    # tech_stack removed - now auto-detected from project files
     auto_merge: bool = Field(default=False, description="Automatically merge successful MRs")
     debug: bool = Field(default=False, description="Enable debug output")
     min_coverage: float = Field(default=70.0, description="Minimum test coverage percentage")

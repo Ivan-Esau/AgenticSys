@@ -64,89 +64,34 @@
                     </div>
                 </div>
 
-                <!-- Tech Stack Configuration -->
+                <!-- Tech Stack Detection (Auto) -->
                 <div class="config-section">
-                    <h3>Technology Stack
-                        <button id="autoDetectBtn" class="btn btn-small btn-secondary">Auto-Detect</button>
-                    </h3>
-                    <div class="form-group">
-                        <label for="language">Language</label>
-                        <input type="text" id="language" value="Python" placeholder="e.g., Python, JavaScript" list="languageList">
-                        <datalist id="languageList">
-                            <option value="Python">
-                            <option value="JavaScript">
-                            <option value="TypeScript">
-                            <option value="Java">
-                            <option value="C#">
-                            <option value="Go">
-                            <option value="Ruby">
-                            <option value="PHP">
-                        </datalist>
+                    <h3>Technology Stack <span class="badge">Auto-Detected</span></h3>
+                    <div class="tech-stack-display" id="techStackDisplay">
+                        <div class="tech-item">
+                            <span class="tech-label">Language:</span>
+                            <span class="tech-value" id="detectedLanguage">Not detected yet</span>
+                        </div>
+                        <div class="tech-item">
+                            <span class="tech-label">Framework:</span>
+                            <span class="tech-value" id="detectedFramework">Not detected yet</span>
+                        </div>
+                        <div class="tech-item">
+                            <span class="tech-label">Testing:</span>
+                            <span class="tech-value" id="detectedTesting">Not detected yet</span>
+                        </div>
+                        <div class="info-message">
+                            ℹ️ Tech stack will be automatically detected from your project files when you start the system.
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="framework">Framework</label>
-                        <input type="text" id="framework" placeholder="e.g., FastAPI, React" list="frameworkList">
-                        <datalist id="frameworkList">
-                            <option value="FastAPI">
-                            <option value="Django">
-                            <option value="Flask">
-                            <option value="React">
-                            <option value="Vue.js">
-                            <option value="Angular">
-                            <option value="Express.js">
-                            <option value="Spring Boot">
-                        </datalist>
-                    </div>
-                    <div class="form-group">
-                        <label for="database">Database</label>
-                        <input type="text" id="database" placeholder="e.g., PostgreSQL, MongoDB" list="databaseList">
-                        <datalist id="databaseList">
-                            <option value="PostgreSQL">
-                            <option value="MySQL">
-                            <option value="MongoDB">
-                            <option value="Redis">
-                            <option value="SQLite">
-                            <option value="Oracle">
-                        </datalist>
-                    </div>
-                    <div class="form-group">
-                        <label for="testing">Testing</label>
-                        <input type="text" id="testing" value="pytest" placeholder="e.g., pytest, jest" list="testingList">
-                        <datalist id="testingList">
-                            <option value="pytest">
-                            <option value="unittest">
-                            <option value="jest">
-                            <option value="mocha">
-                            <option value="JUnit">
-                            <option value="NUnit">
-                            <option value="RSpec">
-                        </datalist>
-                    </div>
-                    <div class="form-group">
-                        <label for="deployment">Deployment</label>
-                        <input type="text" id="deployment" placeholder="e.g., Docker, Kubernetes" list="deploymentList">
-                        <datalist id="deploymentList">
-                            <option value="Docker">
-                            <option value="Kubernetes">
-                            <option value="AWS">
-                            <option value="Azure">
-                            <option value="Google Cloud">
-                            <option value="Heroku">
-                            <option value="Vercel">
-                        </datalist>
-                    </div>
-                    <div class="form-group">
-                        <label for="cicd">CI/CD</label>
-                        <input type="text" id="cicd" value="GitLab CI" placeholder="e.g., GitLab CI, GitHub Actions" list="cicdList">
-                        <datalist id="cicdList">
-                            <option value="GitLab CI">
-                            <option value="GitHub Actions">
-                            <option value="Jenkins">
-                            <option value="CircleCI">
-                            <option value="Travis CI">
-                            <option value="Azure DevOps">
-                        </datalist>
-                    </div>
+
+                    <!-- Hidden fields to maintain compatibility with existing code -->
+                    <input type="hidden" id="language">
+                    <input type="hidden" id="framework">
+                    <input type="hidden" id="database">
+                    <input type="hidden" id="testing">
+                    <input type="hidden" id="deployment">
+                    <input type="hidden" id="cicd">
                 </div>
 
                 <!-- LLM Configuration -->

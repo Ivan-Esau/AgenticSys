@@ -112,7 +112,8 @@ class SystemOrchestrator:
         if not project_id:
             raise ValueError("Project ID is required to initialize the system")
 
-        tech_stack = config.get("tech_stack")
+        # Tech stack will be auto-detected (None triggers detection in Supervisor)
+        tech_stack = config.get("tech_stack")  # Will be None - auto-detect
         mode = config.get("mode", "implement_all")
         specific_issue = config.get("specific_issue")
 

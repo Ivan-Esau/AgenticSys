@@ -47,7 +47,6 @@ class UIManager {
             clearBtn: document.getElementById('clearBtn'),
             themeToggle: document.getElementById('themeToggle'),
             refreshProjects: document.getElementById('refreshProjects'),
-            autoDetectBtn: document.getElementById('autoDetectBtn'),
             refreshIssues: document.getElementById('refreshIssues'),
 
             // Output areas
@@ -262,14 +261,7 @@ class UIManager {
         const config = {
             project_id: projectId,
             mode: mode,
-            tech_stack: {
-                language: this.elements.language.value.trim() || 'Python',
-                framework: this.elements.framework.value.trim() || null,
-                database: this.elements.database.value.trim() || null,
-                testing: this.elements.testing.value.trim() || 'pytest',
-                deployment: this.elements.deployment.value.trim() || null,
-                ci_cd: this.elements.cicd.value.trim() || 'GitLab CI'
-            },
+            // Tech stack will be auto-detected by backend - not sent from frontend
             auto_merge: this.elements.autoMerge.checked,
             debug: this.elements.debugMode.checked,
             min_coverage: parseFloat(this.elements.minCoverage.value) || 70.0,

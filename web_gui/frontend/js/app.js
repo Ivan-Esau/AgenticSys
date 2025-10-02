@@ -142,11 +142,6 @@ class App {
             await this.loadProjects();
         });
 
-        // Auto-detect tech stack
-        this.ui.elements.autoDetectBtn.addEventListener('click', async () => {
-            await this.autoDetectTechStack();
-        });
-
         // Refresh issues button
         this.ui.elements.refreshIssues.addEventListener('click', async () => {
             const projectId = this.ui.elements.projectSelect.value || this.ui.elements.projectId.value;
@@ -309,22 +304,7 @@ class App {
         }
     }
 
-    async autoDetectTechStack() {
-        const projectId = this.ui.elements.projectSelect.value || this.ui.elements.projectId.value;
-        if (!projectId) {
-            this.ui.showError('Please select or enter a project ID first');
-            return;
-        }
-
-        try {
-            this.ui.showInfo('Detecting technology stack...');
-            const techStack = await this.api.detectTechStack(projectId);
-            this.ui.updateTechStack(techStack);
-            this.ui.showSuccess('Technology stack detected successfully');
-        } catch (error) {
-            this.ui.showError(`Failed to detect tech stack: ${error.message}`);
-        }
-    }
+    // Auto-detection removed - backend now handles this automatically
 
     selectIssue(issueNumber) {
         // Set single issue mode and fill in the issue number

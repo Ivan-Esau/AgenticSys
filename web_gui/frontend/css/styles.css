@@ -702,3 +702,57 @@ body {
 ::-webkit-scrollbar-thumb:hover {
     background: var(--text-primary);
 }
+
+/* Tech Stack Auto-Detection Display */
+.tech-stack-display {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-lg);
+}
+
+.tech-item {
+    display: flex;
+    align-items: center;
+    padding: var(--spacing-sm) 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.tech-item:last-of-type {
+    border-bottom: none;
+}
+
+.tech-label {
+    font-weight: 600;
+    color: var(--text-secondary);
+    min-width: 120px;
+    font-size: 0.9rem;
+}
+
+.tech-value {
+    color: var(--text-primary);
+    font-family: 'Courier New', monospace;
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+.badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--bg-primary);
+    background: var(--success-color);
+    border-radius: var(--radius-sm);
+    margin-left: var(--spacing-sm);
+}
+
+.info-message {
+    margin-top: var(--spacing-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--info-color);
+    color: white;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    opacity: 0.9;
+}
