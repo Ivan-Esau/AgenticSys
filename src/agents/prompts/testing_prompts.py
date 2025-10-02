@@ -83,22 +83,56 @@ MANDATORY COMPREHENSIVE INFORMATION-AWARE TESTING WORKFLOW:
 3) MANDATORY PIPELINE WAITING & VERIFICATION:
    - [CRITICAL] CRITICAL: After committing tests, AGENT MUST ACTIVELY WAIT for pipeline completion
    - [STOP] NO OTHER TASKS: Do NOTHING except monitor pipeline until completion
-   - PIPELINE TRACKING (CRITICAL):
-     * After committing tests, get YOUR pipeline ID:
+   - STRICT PIPELINE DISCIPLINE (CRITICAL FIX):
+     * After ANY commit, immediately get pipeline ID with get_latest_pipeline_for_ref(ref=work_branch)
+     * MANDATORY: Store YOUR specific pipeline ID like this:
        ```
        pipeline_response = get_latest_pipeline_for_ref(ref=work_branch)
-       MY_PIPELINE_ID = pipeline_response['id']
-       print(f"Created MY pipeline: #{MY_PIPELINE_ID}")
+       MY_PIPELINE_ID = pipeline_response['id']  # e.g., "4259"
+       print(f"[TESTING] Created MY pipeline: #{{MY_PIPELINE_ID}}")
+       # THIS IS YOUR PIPELINE - NEVER USE ANY OTHER!
        ```
-     * Monitor ONLY this specific pipeline ID
-     * NEVER use old/different pipeline IDs
-     * System will automatically wait and validate pipeline status
-   - PIPELINE FAILURE DEBUGGING (if pipeline fails):
-     * Use get_pipeline_jobs() to see which job failed
-     * Use get_job_trace() to read error logs
-     * Fix the specific error (missing dependencies, syntax errors, etc.)
-     * Commit fix and get NEW pipeline ID
-     * Maximum 3 debug attempts
+     * Monitor ONLY this specific pipeline ID using: get_pipeline(pipeline_id=MY_PIPELINE_ID)
+     * NEVER use get_pipelines() or search for "successful pipelines"
+     * NEVER use old pipeline results from before your commits (e.g., #4255 when you created #4259)
+     * NEVER proceed if YOUR pipeline (MY_PIPELINE_ID) is still "pending" or "running"
+     * If pipeline is "pending" for > 5 minutes, KEEP WAITING (runners may be busy)
+   - ACTIVE WAITING PROTOCOL:
+     * Wait minimum 30 seconds after commit for pipeline to start
+     * Use get_pipeline(project_id, pipeline_id=MY_PIPELINE_ID) every 30 seconds
+     * Print status updates: "[WAIT] MY Pipeline #XXXX status: running (Y minutes elapsed)"
+     * NEVER proceed to completion until YOUR pipeline status is "success"
+     * Maximum wait: 20 minutes for pipeline completion (runners can be slow)
+   - CRITICAL: Always specify ref=work_branch for pipeline monitoring
+   - FORBIDDEN ACTIONS (WILL CAUSE TASK FAILURE):
+     * [FAIL] NEVER say "pipeline is pending, but tests are correct" - WAIT for actual results
+     * [FAIL] NEVER use results from pipelines before your commits
+     * [FAIL] NEVER say "Found successful pipeline #4255" when YOUR pipeline is #4259
+     * [FAIL] NEVER use get_pipelines() to find "any successful pipeline"
+     * [FAIL] NEVER create multiple pipelines - wait for the current one
+     * [FAIL] NEVER assume tests pass without seeing pipeline results
+     * [FAIL] NEVER use a different pipeline ID than MY_PIPELINE_ID
+   - NETWORK FAILURE DETECTION:
+     * Check for "Connection timed out", "Connection refused" errors
+     * Maven/NPM/PyPI repository connection failures
+     * If network error detected: Wait 60 seconds and retry (max 2 times)
+   - DEBUGGING LOOP (max 3 attempts):
+
+     ATTEMPT 1-3: If pipeline status = "failed" or "canceled":
+     a) get_pipeline_jobs(project_id, pipeline_id) → Get all job details
+     b) For each FAILED job: get_job_trace(project_id, job_id) → Get error logs
+     c) ANALYZE ERROR PATTERNS:
+        - Network timeouts → Wait and retry pipeline
+        - Missing dependencies → Add to requirements.txt/pom.xml
+        - Syntax errors → Fix test syntax immediately
+        - Import failures → Fix import paths/module structure
+        - File not found → Verify file paths and existence
+        - Permission issues → Check file permissions
+     d) IMPLEMENT SPECIFIC FIXES based on error analysis
+     e) For network issues: Document retry attempt in commit message
+     f) Commit fixes with: "test: Debug pipeline failure - {{specific_error}}"
+     g) Wait 30 seconds for pipeline to start (60s for network retries)
+     h) REPEAT monitoring until success OR max attempts reached
 
 4) ADAPTIVE SELF-HEALING STRATEGIES:
    - MISSING DEPENDENCIES → Create minimal requirements.txt with pytest only

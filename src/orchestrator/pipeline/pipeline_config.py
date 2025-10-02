@@ -53,7 +53,9 @@ class PipelineConfig:
             'default_retry': {
                 'max': 2,
                 'when': ['network_failure', 'runner_system_failure']
-            }
+            },
+            # Include tech_stack in config for agents
+            'tech_stack': self.tech_stack
         }
 
         # Tech-stack specific configuration
