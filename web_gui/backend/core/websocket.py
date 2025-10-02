@@ -135,6 +135,14 @@ class ConnectionManager:
             "details": details or {}
         })
 
+    async def send_tech_stack(self, tech_stack: Dict[str, Any]):
+        """Send detected tech stack to all clients"""
+        await self.send_event("tech_stack_detected", {
+            "language": tech_stack.get("backend", "unknown"),
+            "framework": tech_stack.get("frontend", "none"),
+            "testing": tech_stack.get("testing", "unknown")
+        })
+
 
 # Global connection manager instance
 ws_manager = ConnectionManager()

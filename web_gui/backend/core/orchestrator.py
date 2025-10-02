@@ -149,10 +149,21 @@ class SystemOrchestrator:
                 "info"
             )
 
-        # Initialize supervisor and inject output callback into executor
+        # Create pipeline update callback for stage visualization
+        async def pipeline_update_callback(stage: str, status: str):
+            """Send pipeline stage updates to WebSocket"""
+            await self.ws_manager.send_pipeline_update(stage, status)
+
+        # Initialize supervisor and inject callbacks
         await self.supervisor.initialize()
         if self.supervisor.executor:
             self.supervisor.executor.output_callback = output_callback
+        # Inject pipeline update callback into supervisor
+        self.supervisor.pipeline_update_callback = pipeline_update_callback
+
+        # Broadcast detected tech stack to GUI
+        if hasattr(self.supervisor, 'detected_tech_stack'):
+            await self.ws_manager.send_tech_stack(self.supervisor.detected_tech_stack)
 
         # Execute supervisor (like CLI does)
         # NOTE: No longer using stdout capture - agents now send directly via WebSocket callback
