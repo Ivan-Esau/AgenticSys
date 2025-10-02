@@ -29,6 +29,8 @@ echo ============================================
 echo.
 
 REM Start the FastAPI server
-python -m uvicorn web_gui.backend.app:app --host 0.0.0.0 --port 8000 --reload
+REM Running without reload to prevent issues with file watching on Windows
+REM WebSocket connections remain stable during agent execution
+python -m uvicorn web_gui.backend.app:app --host 0.0.0.0 --port 8000
 
 pause
