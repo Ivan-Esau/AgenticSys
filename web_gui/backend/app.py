@@ -149,10 +149,13 @@ async def websocket_endpoint(websocket: WebSocket):
                     "data": status
                 })
 
-    except WebSocketDisconnect:
+    except WebSocketDisconnect as e:
+        print(f"[WS] Client disconnected: {e}")
         ws_manager.disconnect(websocket)
     except Exception as e:
-        print(f"WebSocket error: {e}")
+        print(f"[WS ERROR] Unhandled exception in WebSocket handler: {e}")
+        import traceback
+        traceback.print_exc()
         ws_manager.disconnect(websocket)
 
 # Health check endpoint

@@ -87,8 +87,8 @@ class WebSocketClient {
     sendPing() {
         if (this.isConnected) {
             this.send('ping');
-            // Schedule next ping
-            setTimeout(() => this.sendPing(), 30000);
+            // Schedule next ping (15s interval to stay well below server timeout)
+            setTimeout(() => this.sendPing(), 15000);
         }
     }
 

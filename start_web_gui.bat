@@ -30,7 +30,8 @@ echo.
 
 REM Start the FastAPI server
 REM Running without reload to prevent issues with file watching on Windows
-REM WebSocket connections remain stable during agent execution
-python -m uvicorn web_gui.backend.app:app --host 0.0.0.0 --port 8000
+REM WebSocket timeout increased to 60s to match client ping interval (30s)
+REM This prevents server from closing "idle" connections during long agent runs
+python -m uvicorn web_gui.backend.app:app --host 0.0.0.0 --port 8000 --timeout-keep-alive 60 --ws-ping-interval 20 --ws-ping-timeout 60
 
 pause
