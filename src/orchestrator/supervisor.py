@@ -13,7 +13,8 @@ from ..infrastructure.mcp_client import get_common_tools_and_client, SafeMCPClie
 from .core import PerformanceTracker, Router, AgentExecutor
 
 # Import manager components
-from .managers import IssueManager, PipelineManager, PlanningManager
+from .managers import IssueManager, PlanningManager
+from .managers.tech_stack_detector import TechStackDetector
 
 # Import integration components
 from .integrations import MCPIntegration
@@ -30,6 +31,8 @@ class ExecutionState(Enum):
     COMPLETED = "completed"
 
 
+
+
 class Supervisor:
     """
     Refactored orchestrator using modular components for better maintainability.
@@ -41,6 +44,9 @@ class Supervisor:
         self.provided_tech_stack = tech_stack
         self.min_coverage = 70.0
 
+        # Callbacks for Web GUI integration
+        self.pipeline_update_callback = None  # Set by web orchestrator for pipeline stage updates
+
         # Initialize core components
         self.router = Router()
         self.executor = AgentExecutor(project_id, [])
@@ -49,8 +55,8 @@ class Supervisor:
         # Initialize modular managers
         self.mcp = MCPIntegration(project_id)
         self.issue_manager = None  # Will be initialized after MCP
-        self.pipeline_manager = None  # Will be initialized after MCP
         self.planning_manager = PlanningManager()
+        self.tech_stack_detector = TechStackDetector()
 
     async def initialize(self):
         """Initialize all components and managers"""
@@ -66,11 +72,6 @@ class Supervisor:
 
             # Initialize managers with tools
             self.issue_manager = IssueManager(self.project_id, mcp_tools)
-            self.pipeline_manager = PipelineManager(
-                self.project_id,
-                mcp_tools,
-                self.mcp.get_default_branch()
-            )
 
             # Update executor with tools
             self.executor.tools = mcp_tools
@@ -78,18 +79,33 @@ class Supervisor:
             print(f"\n[SUPERVISOR] Initialized for project {self.project_id}")
             print(f"[MODULES] All managers loaded successfully")
 
-            # Initialize pipeline configuration
-            await self.pipeline_manager.initialize_pipeline_config(self.provided_tech_stack)
+            # Determine tech stack
+            if self.provided_tech_stack:
+                # User provided tech stack - normalize it
+                detected_tech_stack = self.tech_stack_detector.from_user_input(self.provided_tech_stack)
+                print(f"[TECH STACK] Using user-provided: {detected_tech_stack.get('backend', 'unknown')}")
+            else:
+                # No user input - planning agent will detect tech stack
+                detected_tech_stack = {'backend': 'auto-detect', 'frontend': 'none'}
+                print(f"[TECH STACK] Will be detected by planning agent")
 
-            # Store pipeline config in executor for agents
-            self.executor.pipeline_config = self.pipeline_manager.pipeline_config
+            # Store detected tech stack for Web GUI broadcast
+            self.detected_tech_stack = detected_tech_stack
 
-            # Store pipeline manager reference for smart pipeline handling
-            self.executor.pipeline_manager = self.pipeline_manager
+            # Store tech stack in executor for agents
+            self.executor.tech_stack = detected_tech_stack
 
         except Exception as e:
             print(f"[SUPERVISOR] Initialization failed: {e}")
             raise
+
+    async def _update_pipeline_stage(self, stage: str, status: str):
+        """Send pipeline stage update to Web GUI if callback is set"""
+        if self.pipeline_update_callback:
+            try:
+                await self.pipeline_update_callback(stage, status)
+            except Exception as e:
+                print(f"[WARN] Pipeline update callback failed: {e}")
 
     async def route_task(self, task_type: str, **kwargs) -> Any:
         """
@@ -190,6 +206,7 @@ class Supervisor:
                 feature_branch = self.issue_manager.create_feature_branch_name(issue)
 
                 # Phase 1: Coding
+                await self._update_pipeline_stage("coding", "running")
                 print(f"[ISSUE #{issue_id}] Phase 1/3: Coding...")
                 print(f"[ISSUE #{issue_id}] Working on branch: {feature_branch}")
                 coding_result = await self.route_task(
@@ -200,9 +217,13 @@ class Supervisor:
 
                 if not coding_result:
                     print(f"[ISSUE #{issue_id}] Coding phase failed")
+                    await self._update_pipeline_stage("coding", "failed")
                     continue  # Retry the whole issue
 
+                await self._update_pipeline_stage("coding", "completed")
+
                 # Phase 2: Testing
+                await self._update_pipeline_stage("testing", "running")
                 print(f"[ISSUE #{issue_id}] Phase 2/3: Testing...")
                 print(f"[ISSUE #{issue_id}] Running tests with minimum {self.min_coverage}% coverage requirement")
 
@@ -214,9 +235,13 @@ class Supervisor:
 
                 if not testing_result:
                     print(f"[ISSUE #{issue_id}] [WARN] Testing phase failed")
+                    await self._update_pipeline_stage("testing", "failed")
                     # Testing agent handles pipeline analysis via MCP tools
 
+                await self._update_pipeline_stage("testing", "completed")
+
                 # Phase 3: Review & Merge Request
+                await self._update_pipeline_stage("review", "running")
                 print(f"[ISSUE #{issue_id}] Phase 3/3: Review & MR...")
                 # Review agent checks pipeline status via MCP tools
 
@@ -227,9 +252,12 @@ class Supervisor:
                 )
 
                 if review_result:
+                    await self._update_pipeline_stage("review", "completed")
                     print(f"[ISSUE #{issue_id}] [OK] Successfully implemented")
                     self.issue_manager.track_completed_issue(issue)
                     return True  # Success!
+                else:
+                    await self._update_pipeline_stage("review", "failed")
 
             except Exception as e:
                 print(f"[ISSUE #{issue_id}] Implementation failed: {e}")
@@ -265,6 +293,7 @@ class Supervisor:
 
         # Phase 1: Planning
         self.state = ExecutionState.PLANNING
+        await self._update_pipeline_stage("planning", "running")
         print("\n" + "="*60)
         print("PHASE 1: PLANNING & ANALYSIS")
         print("="*60)
@@ -279,8 +308,11 @@ class Supervisor:
 
         if not success:
             print("[ERROR] Planning analysis failed after retries")
+            await self._update_pipeline_stage("planning", "failed")
             self.state = ExecutionState.FAILED
             return
+
+        await self._update_pipeline_stage("planning", "completed")
 
         # Store the planning result
         if hasattr(self.executor, 'current_plan') and self.executor.current_plan:
