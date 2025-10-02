@@ -78,13 +78,8 @@ class CLIRunner:
         # CLI mode - build config from arguments
         config = ArgumentParser.parse_to_config(args)
 
-        # Show tech stack menu if requested
-        if config.get("show_menu") and config["mode"] in ["implement", "single"]:
-            tech_stack = self.menu_system.show_tech_stack_menu()
-            if tech_stack is False:  # User cancelled
-                self.display.print_error("[CANCELLED] Exiting...")
-                return None
-            config["tech_stack"] = tech_stack
+        # Tech stack now auto-detected - no menu needed
+        # config["tech_stack"] will be None, triggering auto-detection
 
         # Display configuration summary for CLI mode
         self.display.print_configuration_summary(config)
