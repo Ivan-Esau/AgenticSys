@@ -131,10 +131,7 @@
                             <span>Enable debug output</span>
                         </label>
                     </div>
-                    <div class="form-group">
-                        <label for="minCoverage">Minimum Test Coverage (%)</label>
-                        <input type="number" id="minCoverage" value="70" min="0" max="100">
-                    </div>
+                    <!-- Test coverage removed - defined in project pom.xml -->
                 </div>
 
                 <!-- Control Buttons -->
@@ -158,6 +155,10 @@
                     <div class="status-item">
                         <span class="status-label">Status:</span>
                         <span class="status-value" id="systemStatus">Idle</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Current Agent:</span>
+                        <span class="status-value agent-indicator" id="currentAgent">-</span>
                     </div>
                     <div class="status-item">
                         <span class="status-label">Current Stage:</span>

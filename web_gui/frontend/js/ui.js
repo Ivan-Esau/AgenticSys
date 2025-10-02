@@ -16,6 +16,7 @@ class UIManager {
             statusDot: document.getElementById('statusDot'),
             statusText: document.getElementById('statusText'),
             systemStatus: document.getElementById('systemStatus'),
+            currentAgent: document.getElementById('currentAgent'),
             currentStage: document.getElementById('currentStage'),
             progressBar: document.getElementById('progressBar'),
             progressText: document.getElementById('progressText'),
@@ -34,7 +35,6 @@ class UIManager {
             cicd: document.getElementById('cicd'),
             autoMerge: document.getElementById('autoMerge'),
             debugMode: document.getElementById('debugMode'),
-            minCoverage: document.getElementById('minCoverage'),
 
             // LLM Configuration
             llmProvider: document.getElementById('llmProvider'),
@@ -138,6 +138,27 @@ class UIManager {
 
     updateCurrentStage(stage) {
         this.elements.currentStage.textContent = stage || '-';
+    }
+
+    updateCurrentAgent(agent) {
+        this.elements.currentAgent.textContent = agent || '-';
+    }
+
+    updateTechStack(techStack) {
+        // Update tech stack display
+        const languageEl = document.getElementById('detectedLanguage');
+        const frameworkEl = document.getElementById('detectedFramework');
+        const testingEl = document.getElementById('detectedTesting');
+
+        if (languageEl) {
+            languageEl.textContent = techStack.language || 'unknown';
+        }
+        if (frameworkEl) {
+            frameworkEl.textContent = techStack.framework || 'none';
+        }
+        if (testingEl) {
+            testingEl.textContent = techStack.testing || 'unknown';
+        }
     }
 
     // Pipeline updates
@@ -264,7 +285,7 @@ class UIManager {
             // Tech stack will be auto-detected by backend - not sent from frontend
             auto_merge: this.elements.autoMerge.checked,
             debug: this.elements.debugMode.checked,
-            min_coverage: parseFloat(this.elements.minCoverage.value) || 70.0,
+            // min_coverage removed - defined in project's pom.xml/config files
             llm_config: this.getLLMConfiguration()
         };
 

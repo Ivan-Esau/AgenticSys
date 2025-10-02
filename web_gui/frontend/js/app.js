@@ -60,14 +60,57 @@ class App {
 
         // Agent events
         this.ws.on('agent_output', (data) => {
-            this.ui.addAgentOutput(data.agent, data.content, data.level);
+            // Filter out tool outputs (JSON, file contents, etc.) - only show agent messages
+            const content = data.content;
+
+            // ALWAYS show messages containing important keywords (agent status updates)
+            const importantKeywords = [
+                'COMPLETE:', 'PIPELINE', 'MONITORING', 'WAITING', 'WAIT]',
+                'DEBUG', 'FIX', 'SUCCESS', 'FAILED', 'ERROR', 'RETRY',
+                'Issue #', 'Branch:', 'Merge', 'Tests', 'Coverage'
+            ];
+
+            const containsImportantKeyword = importantKeywords.some(keyword =>
+                content.includes(keyword)
+            );
+
+            if (containsImportantKeyword) {
+                // Always show important status messages
+                this.ui.updateCurrentAgent(data.agent);
+                this.ui.addAgentOutput(data.agent, data.content, data.level);
+                return;
+            }
+
+            // Skip if content looks like tool output:
+            // - Starts with { or [ AND contains multiple lines (JSON structure)
+            // - Contains file paths with line numbers (Read tool output)
+            // - Is extremely long (> 3000 chars, likely file/API response)
+            const looksLikeJSON =
+                (content.trim().startsWith('{') || content.trim().startsWith('[')) &&
+                content.split('\n').length > 3;  // Multi-line JSON
+
+            const looksLikeFileContent = /^\s*\d+→/.test(content);  // Line numbers from Read tool
+
+            const isTooLong = content.length > 3000;  // Increased from 1000
+
+            const looksLikeToolOutput = looksLikeJSON || looksLikeFileContent || isTooLong;
+
+            if (!looksLikeToolOutput) {
+                // Update current agent indicator
+                this.ui.updateCurrentAgent(data.agent);
+
+                // Show agent message
+                this.ui.addAgentOutput(data.agent, data.content, data.level);
+            }
         });
 
         this.ws.on('agent_start', (data) => {
+            this.ui.updateCurrentAgent(data.agent);
             this.ui.addAgentOutput(data.agent, `Starting ${data.agent}...`, 'info');
         });
 
         this.ws.on('agent_complete', (data) => {
+            this.ui.updateCurrentAgent('-');
             this.ui.addAgentOutput(
                 data.agent,
                 `Completed in ${data.duration.toFixed(2)}s`,
@@ -104,6 +147,12 @@ class App {
                 `Issue #${data.issue_id}: ${data.status}`,
                 data.status === 'failed' ? 'error' : 'info'
             );
+        });
+
+        // Tech stack detection
+        this.ws.on('tech_stack_detected', (data) => {
+            console.log('[TECH STACK] Detected:', data);
+            this.ui.updateTechStack(data);
         });
 
         // Success/Error messages
