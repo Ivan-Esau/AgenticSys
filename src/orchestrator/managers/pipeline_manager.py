@@ -164,6 +164,13 @@ class PipelineManager:
 
         return tech_stack
 
+    def _get_tool(self, tool_name: str):
+        """Helper to get a tool by name."""
+        for tool in self.tools:
+            if hasattr(tool, 'name') and tool.name == tool_name:
+                return tool
+        return None
+
     # Removed: ensure_basic_pipeline_exists()
     # Removed: get_pipeline_instructions()
     # Removed: analyze_and_fix_pipeline_failures() - Agents use MCP tools directly
