@@ -72,8 +72,28 @@ class PlanningManager:
     def extract_issue_priority_from_plan(self, plan_data: Any, all_issues: List[Dict]) -> List[Dict]:
         """
         Extract issue priority order from planning agent's analysis.
+        Priority: ORCH_PLAN.json > text patterns > dependency-based fallback
         """
+        # First, check if plan_data contains ORCH_PLAN.json structure
+        if isinstance(plan_data, dict) and 'implementation_order' in plan_data:
+            # ORCH_PLAN.json format - use implementation_order directly
+            print("[PLANNING] Found ORCH_PLAN.json with implementation_order")
+            return self.parse_implementation_order(plan_data, all_issues)
+
         if isinstance(plan_data, str):
+            # Check if text contains ORCH_PLAN.json content
+            import json
+            import re
+            json_match = re.search(r'\{[^{]*"implementation_order"[^}]*\}', plan_data, re.DOTALL)
+            if json_match:
+                try:
+                    plan_json = json.loads(json_match.group())
+                    if 'implementation_order' in plan_json:
+                        print("[PLANNING] Extracted ORCH_PLAN.json from text")
+                        return self.parse_implementation_order(plan_json, all_issues)
+                except json.JSONDecodeError:
+                    pass
+
             # Parse text-based plan for issue priorities
             return self.parse_text_plan_priorities(plan_data, all_issues)
         elif isinstance(plan_data, dict) and 'issues' in plan_data:
@@ -81,6 +101,27 @@ class PlanningManager:
             return self.parse_structured_plan_priorities(plan_data, all_issues)
         else:
             return []
+
+    def parse_implementation_order(self, plan_data: Dict, all_issues: List[Dict]) -> List[Dict]:
+        """Parse implementation_order from ORCH_PLAN.json"""
+        prioritized = []
+        issue_map = {issue.get('iid'): issue for issue in all_issues}
+
+        implementation_order = plan_data.get('implementation_order', [])
+        print(f"[PLANNING] Implementation order from plan: {implementation_order}")
+
+        for issue_iid in implementation_order:
+            if issue_iid in issue_map:
+                prioritized.append(issue_map[issue_iid])
+                print(f"[PLANNING] Added Issue #{issue_iid} from implementation_order")
+
+        # Add any remaining issues not in the order
+        for issue in all_issues:
+            if issue not in prioritized:
+                prioritized.append(issue)
+                print(f"[PLANNING] Added remaining Issue #{issue.get('iid')}")
+
+        return prioritized
 
     def parse_text_plan_priorities(self, plan_text: str, all_issues: List[Dict]) -> List[Dict]:
         """
@@ -159,6 +200,124 @@ class PlanningManager:
     def apply_dependency_based_prioritization(self, all_issues: List[Dict]) -> List[Dict]:
         """
         Apply dependency-based prioritization as fallback.
+        Extracts dependencies from issue descriptions ("Voraussetzungen:" section).
+        """
+        print("[PLANNING] Using dependency-based prioritization (parsing Voraussetzungen)")
+
+        # Build dependency map from issue descriptions
+        dependency_map = {}
+        issue_map = {issue.get('iid'): issue for issue in all_issues}
+
+        for issue in all_issues:
+            issue_iid = issue.get('iid')
+            description = issue.get('description', '')
+            deps = self.extract_dependencies_from_description(description, issue_iid)
+            dependency_map[issue_iid] = deps
+
+        # Topological sort to get implementation order
+        implementation_order = self.topological_sort(dependency_map, list(issue_map.keys()))
+
+        # Return issues in dependency order
+        prioritized = []
+        for issue_iid in implementation_order:
+            if issue_iid in issue_map:
+                prioritized.append(issue_map[issue_iid])
+
+        return prioritized
+
+    def extract_dependencies_from_description(self, description: str, issue_iid: int) -> List[int]:
+        """
+        Extract dependencies from issue description.
+        Looks for "Voraussetzungen:" or "Prerequisites:" sections.
+        """
+        dependencies = []
+
+        # Pattern for Voraussetzungen/Prerequisites section
+        prereq_patterns = [
+            r'Voraussetzungen:?\s*(.+?)(?:\n\n|\n[A-Z]|$)',  # German
+            r'Prerequisites:?\s*(.+?)(?:\n\n|\n[A-Z]|$)'      # English
+        ]
+
+        for pattern in prereq_patterns:
+            match = re.search(pattern, description, re.IGNORECASE | re.DOTALL)
+            if match:
+                prereq_text = match.group(1).lower()
+                print(f"[PLANNING] Issue #{issue_iid} prerequisites: {prereq_text[:100]}")
+
+                # Parse dependency keywords
+                if 'keine' in prereq_text or 'none' in prereq_text:
+                    # No dependencies
+                    print(f"[PLANNING] Issue #{issue_iid}: No dependencies (foundational)")
+                    break
+
+                # Map German dependency keywords to issue types
+                keyword_to_issue = {
+                    'projekt': 1,  # "Projekt existiert" → Issue 1
+                    'aufgabe': 3,  # "Aufgabe existiert" → Issue 3
+                    'benutzer': 5,  # "Benutzer" → Issue 5
+                    'task': 3,
+                    'user': 5,
+                    'project': 1
+                }
+
+                for keyword, dep_issue in keyword_to_issue.items():
+                    if keyword in prereq_text and dep_issue != issue_iid:
+                        dependencies.append(dep_issue)
+
+                # Extract explicit issue references (#1, Issue 2, etc.)
+                explicit_refs = re.findall(r'(?:issue|aufgabe|#)\s*(\d+)', prereq_text, re.IGNORECASE)
+                for ref in explicit_refs:
+                    dep_issue = int(ref)
+                    if dep_issue != issue_iid and dep_issue not in dependencies:
+                        dependencies.append(dep_issue)
+
+                break
+
+        if dependencies:
+            print(f"[PLANNING] Issue #{issue_iid} depends on: {dependencies}")
+
+        return dependencies
+
+    def topological_sort(self, dependency_map: Dict[int, List[int]], all_issue_iids: List[int]) -> List[int]:
+        """
+        Topological sort to order issues by dependencies.
+        Issues with no dependencies come first.
+        """
+        # Build in-degree map (count of dependencies)
+        in_degree = {iid: 0 for iid in all_issue_iids}
+        for iid, deps in dependency_map.items():
+            for dep in deps:
+                if dep in in_degree:  # Only count dependencies that exist
+                    in_degree[iid] += 1
+
+        # Start with issues that have no dependencies
+        queue = [iid for iid in all_issue_iids if in_degree[iid] == 0]
+        sorted_order = []
+
+        while queue:
+            # Sort queue to ensure consistent ordering (lower IIDs first)
+            queue.sort()
+            current = queue.pop(0)
+            sorted_order.append(current)
+
+            # Find issues that depend on current issue
+            for iid in all_issue_iids:
+                if iid in dependency_map and current in dependency_map[iid]:
+                    in_degree[iid] -= 1
+                    if in_degree[iid] == 0 and iid not in queue:
+                        queue.append(iid)
+
+        # Add any remaining issues (circular dependencies)
+        for iid in all_issue_iids:
+            if iid not in sorted_order:
+                sorted_order.append(iid)
+
+        print(f"[PLANNING] Dependency-based order: {sorted_order}")
+        return sorted_order
+
+    def OLD_apply_dependency_based_prioritization(self, all_issues: List[Dict]) -> List[Dict]:
+        """
+        OLD: Apply dependency-based prioritization as fallback.
         Based on common patterns: foundation issues first, then dependent features.
         """
         foundation_keywords = ['project', 'user', 'login', 'setup', 'database', 'model']
