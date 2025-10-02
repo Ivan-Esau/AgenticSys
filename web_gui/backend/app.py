@@ -11,6 +11,7 @@ import json
 import asyncio
 from pathlib import Path
 from typing import Dict, Any
+from datetime import datetime
 import sys
 
 # Add project root to path
@@ -107,6 +108,18 @@ async def root():
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time communication"""
     await ws_manager.connect(websocket)
+
+    # Send current system state immediately after connection (state restoration)
+    try:
+        status = orchestrator.get_status()
+        await websocket.send_json({
+            "type": "system_status",
+            "data": status,
+            "timestamp": datetime.now().isoformat()
+        })
+        print(f"[WS] Sent current system status to new connection: running={status.get('running', False)}")
+    except Exception as e:
+        print(f"[WS] Failed to send initial status: {e}")
 
     try:
         while True:
