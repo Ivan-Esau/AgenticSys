@@ -32,6 +32,7 @@ class SystemOrchestrator:
         self.current_config = None
         self.start_time = None
         self.current_issue = None
+        self.current_branch = None  # Track current Git branch being worked on
         self.current_stage = None
         self.current_agent = None
 
@@ -242,7 +243,19 @@ class SystemOrchestrator:
         self.current_issue = issue
         issue_id = issue.get("iid", issue.get("id"))
 
+        # Create and track the feature branch for this issue
+        self.current_branch = f"feature/issue-{issue_id}"
+
+        # Send issue update with branch info
         await self.ws_manager.send_issue_update(issue_id, "processing", issue)
+
+        # Send system status update with current issue and branch
+        await self.ws_manager.send_system_status({
+            "running": True,
+            "current_issue": issue_id,
+            "current_branch": self.current_branch,
+            "message": f"Processing issue #{issue_id} in branch {self.current_branch}"
+        })
 
         try:
             # Planning stage
@@ -271,6 +284,7 @@ class SystemOrchestrator:
         finally:
             self.stats["processed_issues"] += 1
             self.current_issue = None
+            self.current_branch = None
 
     async def _run_stage(self, stage: str, issue: Dict[str, Any]):
         """Run a specific pipeline stage"""
@@ -398,6 +412,7 @@ class SystemOrchestrator:
             "current_stage": self.current_stage,
             "current_agent": self.current_agent,
             "current_issue": self.current_issue,
+            "current_branch": self.current_branch,
             "progress": self._calculate_progress(),
             "start_time": self.start_time,
             "stats": self.stats

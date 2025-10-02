@@ -144,6 +144,20 @@ class UIManager {
         this.elements.currentAgent.textContent = agent || '-';
     }
 
+    updateCurrentIssue(issue) {
+        const currentIssueEl = document.getElementById('currentIssue');
+        if (currentIssueEl) {
+            currentIssueEl.textContent = issue ? `#${issue}` : '-';
+        }
+    }
+
+    updateCurrentBranch(branch) {
+        const currentBranchEl = document.getElementById('currentBranch');
+        if (currentBranchEl) {
+            currentBranchEl.textContent = branch || '-';
+        }
+    }
+
     updateTechStack(techStack) {
         // Update tech stack display
         const languageEl = document.getElementById('detectedLanguage');

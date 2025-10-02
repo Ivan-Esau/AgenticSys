@@ -269,6 +269,14 @@ class App {
             this.ui.updateCurrentStage(status.current_stage);
         }
 
+        if (status.current_issue !== undefined) {
+            this.ui.updateCurrentIssue(status.current_issue);
+        }
+
+        if (status.current_branch !== undefined) {
+            this.ui.updateCurrentBranch(status.current_branch);
+        }
+
         if (status.progress !== undefined) {
             this.ui.updateProgress(status.progress);
         }
