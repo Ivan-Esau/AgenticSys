@@ -11,7 +11,7 @@ from datetime import datetime
 
 from .models import (
     SystemConfig, SystemStatus, APIResponse,
-    ProjectInfo, IssueStatus, TechStack
+    ProjectInfo, IssueStatus
 )
 
 router = APIRouter()
@@ -372,7 +372,7 @@ async def detect_tech_stack(project_id: str):
         except Exception as e:
             print(f"[INFO] Could not auto-detect tech stack: {e}")
 
-        return TechStack(**tech_stack)
+        return tech_stack  # Return plain dict (TechStack model removed)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
