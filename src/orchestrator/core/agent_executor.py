@@ -117,10 +117,7 @@ class AgentExecutor:
             print("\n[AGENT EXECUTOR] Executing Planning Agent...")
             print(f"[AGENT EXECUTOR] Mode: {'Implementation' if apply else 'Analysis'}")
 
-            # Cancel all pending pipelines for clean baseline
-            if self.pipeline_manager:
-                print("[AGENT EXECUTOR] Canceling obsolete pipelines for clean baseline...")
-                await self.pipeline_manager.cancel_obsolete_pipelines(keep_latest=0)
+            # Agents will monitor their own pipelines via MCP tools
 
             # Execute planning agent with timeout protection
             result = await asyncio.wait_for(
@@ -220,10 +217,7 @@ class AgentExecutor:
         try:
             print(f"\n[AGENT EXECUTOR] Executing Testing Agent for Issue #{issue.get('iid')}...")
 
-            # Cancel obsolete pipelines before starting tests
-            if self.pipeline_manager:
-                print("[AGENT EXECUTOR] Canceling obsolete pipelines before testing...")
-                await self.pipeline_manager.cancel_obsolete_pipelines(branch=branch, keep_latest=1)
+            # Testing agent monitors pipeline via MCP tools
 
             # Execute testing agent
             result = await testing_agent.run(

@@ -214,14 +214,11 @@ class Supervisor:
 
                 if not testing_result:
                     print(f"[ISSUE #{issue_id}] [WARN] Testing phase failed")
-                    # Analyze pipeline failures
-                    await self.pipeline_manager.analyze_and_fix_pipeline_failures(issue_id, self.executor)
+                    # Testing agent handles pipeline analysis via MCP tools
 
                 # Phase 3: Review & Merge Request
                 print(f"[ISSUE #{issue_id}] Phase 3/3: Review & MR...")
-
-                # Check pipeline status before review
-                await self.pipeline_manager.check_pipeline_status(issue_id)
+                # Review agent checks pipeline status via MCP tools
 
                 review_result = await self.route_task(
                     "review",
