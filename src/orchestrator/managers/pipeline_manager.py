@@ -66,11 +66,12 @@ class PipelineManager:
 
     async def initialize_pipeline_config(self, tech_stack: Dict[str, str] = None, mode: str = 'minimal'):
         """
-        Initialize pipeline configuration and create basic pipeline if needed.
+        Initialize pipeline configuration (tech stack only).
+        Users provide their own .gitlab-ci.yml - no pipeline generation.
 
         Args:
             tech_stack: Technology stack configuration
-            mode: Pipeline mode - 'minimal' (default), 'standard', or 'full'
+            mode: Unused - kept for backward compatibility
         """
         try:
             # Use provided tech stack if available, otherwise detect from project files
@@ -81,20 +82,18 @@ class PipelineManager:
             else:
                 tech_stack = await self.detect_project_tech_stack()
 
-            # Initialize pipeline config with mode (default: minimal for agent workflow)
+            # Initialize pipeline config (stores tech stack only)
             self.pipeline_config = PipelineConfig(tech_stack, mode=mode)
-            print(f"[PIPELINE CONFIG] Mode: {mode} (2-stage: test + build)" if mode == 'minimal' else f"[PIPELINE CONFIG] Mode: {mode}")
 
             print(f"[PIPELINE CONFIG] Initialized for {tech_stack.get('backend', 'unknown')} backend")
             if tech_stack.get('frontend') != 'none':
                 print(f"[PIPELINE CONFIG] Frontend: {tech_stack.get('frontend')}")
 
-            # Create basic pipeline if it doesn't exist
-            await self.ensure_basic_pipeline_exists()
+            # Note: Users provide their own .gitlab-ci.yml - no automatic pipeline creation
 
         except Exception as e:
             print(f"[PIPELINE CONFIG] Failed to initialize: {e}")
-            # Use default Python config as fallback with minimal mode
+            # Use default Python config as fallback
             self.pipeline_config = PipelineConfig({'backend': 'python', 'frontend': 'none'}, mode=mode)
 
     async def detect_project_tech_stack(self) -> Dict[str, str]:
@@ -165,79 +164,9 @@ class PipelineManager:
 
         return tech_stack
 
-    async def ensure_basic_pipeline_exists(self):
-        """Create a basic .gitlab-ci.yml pipeline if it doesn't exist."""
-        try:
-            get_file_tool = self._get_tool('get_file_contents')
-
-            if not get_file_tool:
-                print("[PIPELINE] get_file_contents tool not found - cannot check for existing pipeline")
-                return
-
-            # Try to get existing pipeline
-            try:
-                existing_pipeline = await get_file_tool.ainvoke({
-                    "project_id": self.project_id,
-                    "file_path": ".gitlab-ci.yml",
-                    "ref": self.default_branch
-                })
-
-                if existing_pipeline:
-                    print("[PIPELINE] [OK] Basic pipeline already exists - skipping creation")
-                    return
-
-            except Exception:
-                # File doesn't exist, that's fine - we'll create it
-                pass
-
-            # Generate basic pipeline content
-            pipeline_yaml = self.pipeline_config.generate_pipeline_yaml()
-
-            # Create the pipeline file
-            create_file_tool = self._get_tool('create_or_update_file')
-
-            if not create_file_tool:
-                print("[PIPELINE] create_or_update_file tool not found - cannot create pipeline")
-                return
-
-            await create_file_tool.ainvoke({
-                "project_id": self.project_id,
-                "file_path": ".gitlab-ci.yml",
-                "content": pipeline_yaml,
-                "commit_message": f"feat: add basic CI/CD pipeline for {self.pipeline_config.backend}",
-                "branch": self.default_branch
-            })
-
-            print(f"[PIPELINE] [OK] Created basic {self.pipeline_config.backend} pipeline (.gitlab-ci.yml)")
-
-        except Exception as e:
-            print(f"[PIPELINE] [WARN] Failed to create basic pipeline: {e}")
-            print("[PIPELINE] Project will continue without CI/CD pipeline")
-
-    def get_pipeline_instructions(self) -> str:
-        """Get dynamic pipeline instructions for agents."""
-        if not self.pipeline_config:
-            return "Use standard Python pipeline with pytest"
-
-        config = self.pipeline_config.config
-        instructions = []
-
-        instructions.append(f"PIPELINE CONFIGURATION FOR {config.get('backend', 'python').upper()}:")
-        instructions.append(f"- Docker Image: {config.get('docker_image', 'python:3.11-slim')}")
-        instructions.append(f"- Test Framework: {config.get('test_framework', 'pytest')}")
-        instructions.append(f"- Package Manager: {config.get('package_manager', 'pip')}")
-        instructions.append(f"- Requirements File: {config.get('requirements_file', 'requirements.txt')}")
-        instructions.append(f"- Test Directory: {config.get('test_directory', 'tests')}")
-        instructions.append(f"- Source Directory: {config.get('source_directory', 'src')}")
-        instructions.append(f"- Min Coverage: {config.get('min_coverage', 70)}%")
-        instructions.append("")
-        instructions.append("TEST COMMAND:")
-        instructions.append(f"  {self.pipeline_config.get_test_command()}")
-        instructions.append("")
-        instructions.append("COVERAGE COMMAND:")
-        instructions.append(f"  {self.pipeline_config.get_coverage_command()}")
-
-        return '\n'.join(instructions)
+    # Removed: ensure_basic_pipeline_exists()
+    # Removed: get_pipeline_instructions()
+    # Users provide their own .gitlab-ci.yml pipelines
 
     async def analyze_and_fix_pipeline_failures(self, issue_id: str, executor) -> Dict[str, Any]:
         """
