@@ -97,3 +97,6 @@ web_gui/frontend/dist/
 *.pem
 secrets/
 credentials/
+# Debugging utility scripts
+check_branches.py
+list_tools.py
