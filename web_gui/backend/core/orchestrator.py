@@ -58,6 +58,9 @@ class SystemOrchestrator:
             return
 
         try:
+            # Clear old session history when starting a NEW session
+            self.ws_manager.clear_session()
+
             self.current_config = config
             self.running = True
             self.start_time = datetime.now()
@@ -84,6 +87,7 @@ class SystemOrchestrator:
                 "running": False,
                 "message": "System stopped"
             })
+            # Note: Do NOT clear session here - keep history for reconnection
 
     async def stop(self):
         """Stop the running system"""

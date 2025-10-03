@@ -214,6 +214,14 @@ class Supervisor:
             print(f"[ERROR] Invalid issue structure for #{issue_id}")
             return False
 
+        # CRITICAL: Check if issue is already completed before starting workflow
+        print(f"[CHECK] Verifying completion status for issue #{issue_id}...")
+        is_completed = await self.issue_manager.is_issue_completed(issue)
+        if is_completed:
+            print(f"[SKIP] Issue #{issue_id} is already closed/merged - skipping implementation")
+            self.issue_manager.track_completed_issue(issue)
+            return True  # Return success since work is already done
+
         # Create issue tracker for this issue
         self.current_issue_tracker = IssueTracker(self.run_logger.run_id, issue_id)
         self.run_logger.add_issue(issue_id)

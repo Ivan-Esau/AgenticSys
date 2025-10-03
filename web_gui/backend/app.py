@@ -108,18 +108,7 @@ async def root():
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time communication"""
     await ws_manager.connect(websocket)
-
-    # Send current system state immediately after connection (state restoration)
-    try:
-        status = orchestrator.get_status()
-        await websocket.send_json({
-            "type": "system_status",
-            "data": status,
-            "timestamp": datetime.now().isoformat()
-        })
-        print(f"[WS] Sent current system status to new connection: running={status.get('running', False)}")
-    except Exception as e:
-        print(f"[WS] Failed to send initial status: {e}")
+    # Note: Connection manager handles state replay automatically
 
     try:
         while True:
@@ -150,13 +139,16 @@ async def websocket_endpoint(websocket: WebSocket):
                 })
 
     except WebSocketDisconnect as e:
-        print(f"[WS] Client disconnected: {e}")
-        ws_manager.disconnect(websocket)
+        # Extract close code and reason from WebSocketDisconnect exception
+        close_code = e.code if hasattr(e, 'code') else None
+        reason = e.reason if hasattr(e, 'reason') else str(e)
+        print(f"[WS] Client disconnected: ({close_code}, '{reason}')")
+        ws_manager.disconnect(websocket, reason=reason, close_code=close_code)
     except Exception as e:
-        print(f"[WS ERROR] Unhandled exception in WebSocket handler: {e}")
+        print(f"[WS-ERROR] Unhandled exception in WebSocket handler: {e}")
         import traceback
         traceback.print_exc()
-        ws_manager.disconnect(websocket)
+        ws_manager.disconnect(websocket, reason=f"Unhandled exception: {str(e)}")
 
 # Health check endpoint
 @app.get("/health")
@@ -168,6 +160,32 @@ async def health_check():
         "websocket_clients": ws_manager.active_connections_count()
     }
 
+# Session info endpoint
+@app.get("/api/session/info")
+async def get_session_info():
+    """Get current session information for reconnection"""
+    return ws_manager.get_session_info()
+
+# WebSocket diagnostics endpoints
+@app.get("/api/debug/ws/diagnostics")
+async def get_ws_diagnostics():
+    """Get detailed WebSocket connection diagnostics"""
+    return ws_manager.get_connection_diagnostics()
+
+@app.get("/api/debug/ws/disconnections")
+async def get_ws_disconnection_summary():
+    """Get summary of WebSocket disconnection patterns"""
+    return ws_manager.get_disconnection_summary()
+
+@app.post("/api/debug/ws/toggle")
+async def toggle_ws_debug_mode():
+    """Toggle WebSocket debug mode"""
+    ws_manager.debug_mode = not ws_manager.debug_mode
+    return {
+        "debug_mode": ws_manager.debug_mode,
+        "message": f"WebSocket debug mode {'enabled' if ws_manager.debug_mode else 'disabled'}"
+    }
+
 # Startup event
 @app.on_event("startup")
 async def startup_event():
@@ -175,6 +193,8 @@ async def startup_event():
     print("[STARTUP] AgenticSys Web GUI starting...")
     print("[STARTUP] WebSocket server ready")
     print("[STARTUP] API endpoints ready")
+    # Start WebSocket keepalive to prevent timeout disconnections
+    await ws_manager.start_keepalive()
     print("[STARTUP] System initialized")
 
 # Shutdown event
@@ -182,5 +202,6 @@ async def startup_event():
 async def shutdown_event():
     """Clean up on shutdown"""
     print("[SHUTDOWN] Shutting down AgenticSys Web GUI...")
+    await ws_manager.stop_keepalive()
     await orchestrator.cleanup()
     await ws_manager.disconnect_all()
