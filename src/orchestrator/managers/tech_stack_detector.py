@@ -3,7 +3,8 @@ Tech Stack Detection Module
 Detects project technology stack without hardcoded MCP tool dependencies.
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, List
+import json
 
 
 class TechStackDetector:
@@ -106,8 +107,96 @@ class TechStackDetector:
         if 'backend' not in tech_stack:
             return False
 
-        valid_backends = ['java', 'python', 'nodejs', 'rust', 'go', 'unknown']
+        valid_backends = ['java', 'python', 'nodejs', 'rust', 'go', 'unknown', 'auto-detect']
         if tech_stack['backend'] not in valid_backends:
             return False
 
         return True
+
+    @staticmethod
+    async def detect_from_repository(project_id: str, mcp_tools: List[Any]) -> Dict[str, str]:
+        """
+        Detect tech stack by examining repository files using MCP tools.
+        Uses dynamic tool discovery - no hardcoded tool names.
+
+        Args:
+            project_id: GitLab project ID
+            mcp_tools: List of available MCP tools
+
+        Returns:
+            Detected tech stack dict like {'backend': 'java', 'frontend': 'none'}
+        """
+        try:
+            # Find a tool that can list repository contents
+            # Look for tools with names containing 'tree', 'list', or 'repository'
+            repo_tool = None
+            for tool in mcp_tools:
+                if hasattr(tool, 'name'):
+                    tool_name = tool.name.lower()
+                    if any(keyword in tool_name for keyword in ['tree', 'repository', 'files', 'contents']):
+                        if 'list' in tool_name or 'get' in tool_name or 'tree' in tool_name:
+                            repo_tool = tool
+                            print(f"[TECH STACK] Using tool '{tool.name}' for detection")
+                            break
+
+            if not repo_tool:
+                print("[TECH STACK] No repository listing tool found, using default")
+                return TechStackDetector.get_default()
+
+            # Call the tool to get repository file tree
+            # Try different parameter variations
+            result = None
+            try:
+                # Try with project_id parameter
+                result = await repo_tool.ainvoke({'project_id': project_id})
+            except Exception as e:
+                print(f"[TECH STACK] First attempt failed: {e}")
+                try:
+                    # Try with id parameter
+                    result = await repo_tool.ainvoke({'id': project_id})
+                except Exception as e2:
+                    print(f"[TECH STACK] Second attempt failed: {e2}")
+                    return TechStackDetector.get_default()
+
+            # Parse the result to get list of files
+            file_list = []
+            if isinstance(result, str):
+                try:
+                    parsed = json.loads(result)
+                    if isinstance(parsed, list):
+                        # Extract file names/paths from tree structure
+                        for item in parsed:
+                            if isinstance(item, dict):
+                                # Look for 'name', 'path', or 'file' keys
+                                name = item.get('name') or item.get('path') or item.get('file')
+                                if name:
+                                    file_list.append(name)
+                            elif isinstance(item, str):
+                                file_list.append(item)
+                except json.JSONDecodeError:
+                    # Not JSON, treat as plain text file list
+                    file_list = [line.strip() for line in result.split('\n') if line.strip()]
+
+            elif isinstance(result, list):
+                for item in result:
+                    if isinstance(item, dict):
+                        name = item.get('name') or item.get('path') or item.get('file')
+                        if name:
+                            file_list.append(name)
+                    elif isinstance(item, str):
+                        file_list.append(item)
+
+            if not file_list:
+                print("[TECH STACK] No files found in repository, using default")
+                return TechStackDetector.get_default()
+
+            # Use file pattern detection
+            detected = TechStackDetector.from_file_patterns(file_list)
+            print(f"[TECH STACK] Auto-detected from {len(file_list)} files: {detected.get('backend', 'unknown')}")
+            return detected
+
+        except Exception as e:
+            print(f"[TECH STACK] Detection failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return TechStackDetector.get_default()

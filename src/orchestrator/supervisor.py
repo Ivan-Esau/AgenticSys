@@ -6,6 +6,7 @@ Main orchestrator that coordinates specialized modules for workflow management.
 import asyncio
 from typing import Dict, Optional, Any, List
 from enum import Enum
+from datetime import datetime
 
 from ..infrastructure.mcp_client import get_common_tools_and_client, SafeMCPClient
 
@@ -18,6 +19,11 @@ from .managers.tech_stack_detector import TechStackDetector
 
 # Import integration components
 from .integrations import MCPIntegration
+
+# Import analytics components
+from .analytics import RunLogger, IssueTracker
+from .analytics.csv_exporter import CSVExporter
+from pathlib import Path
 
 
 class ExecutionState(Enum):
@@ -38,7 +44,7 @@ class Supervisor:
     Refactored orchestrator using modular components for better maintainability.
     """
 
-    def __init__(self, project_id: str, tech_stack: dict = None):
+    def __init__(self, project_id: str, tech_stack: dict = None, llm_config: Dict[str, Any] = None, mcp_log_callback=None):
         self.project_id = project_id
         self.state = ExecutionState.INITIALIZING
         self.provided_tech_stack = tech_stack
@@ -46,6 +52,7 @@ class Supervisor:
 
         # Callbacks for Web GUI integration
         self.pipeline_update_callback = None  # Set by web orchestrator for pipeline stage updates
+        self.mcp_log_callback = mcp_log_callback  # Callback for MCP server logs
 
         # Initialize core components
         self.router = Router()
@@ -58,11 +65,22 @@ class Supervisor:
         self.planning_manager = PlanningManager()
         self.tech_stack_detector = TechStackDetector()
 
+        # Initialize analytics
+        config = {
+            'llm_provider': llm_config.get('provider', 'unknown') if llm_config else 'unknown',
+            'llm_model': llm_config.get('model', 'unknown') if llm_config else 'unknown',
+            'llm_temperature': llm_config.get('temperature', 0.0) if llm_config else 0.0,
+            'mode': 'implement_all'  # Will be updated in execute()
+        }
+        self.run_logger = RunLogger(project_id, config)
+        self.csv_exporter = CSVExporter(Path('logs'))
+        self.current_issue_tracker = None  # Will be created per issue
+
     async def initialize(self):
         """Initialize all components and managers"""
         try:
-            # Get MCP tools and client
-            mcp_tools, client = await get_common_tools_and_client()
+            # Get MCP tools and client (with optional logging callback)
+            mcp_tools, client = await get_common_tools_and_client(self.mcp_log_callback)
 
             # Wrap client with SafeMCPClient for better error handling
             safe_client = SafeMCPClient(client)
@@ -85,9 +103,13 @@ class Supervisor:
                 detected_tech_stack = self.tech_stack_detector.from_user_input(self.provided_tech_stack)
                 print(f"[TECH STACK] Using user-provided: {detected_tech_stack.get('backend', 'unknown')}")
             else:
-                # No user input - planning agent will detect tech stack
-                detected_tech_stack = {'backend': 'auto-detect', 'frontend': 'none'}
-                print(f"[TECH STACK] Will be detected by planning agent")
+                # Auto-detect from repository using MCP tools
+                print(f"[TECH STACK] Auto-detecting from repository...")
+                detected_tech_stack = await self.tech_stack_detector.detect_from_repository(
+                    self.project_id,
+                    mcp_tools
+                )
+                print(f"[TECH STACK] Detection complete: {detected_tech_stack}")
 
             # Store detected tech stack for Web GUI broadcast
             self.detected_tech_stack = detected_tech_stack
@@ -192,6 +214,13 @@ class Supervisor:
             print(f"[ERROR] Invalid issue structure for #{issue_id}")
             return False
 
+        # Create issue tracker for this issue
+        self.current_issue_tracker = IssueTracker(self.run_logger.run_id, issue_id)
+        self.run_logger.add_issue(issue_id)
+
+        # Pass issue tracker to executor
+        self.executor.issue_tracker = self.current_issue_tracker
+
         # Retry loop
         for attempt in range(retries):
             if attempt > 0:
@@ -255,17 +284,39 @@ class Supervisor:
                     await self._update_pipeline_stage("review", "completed")
                     print(f"[ISSUE #{issue_id}] [OK] Successfully implemented")
                     self.issue_manager.track_completed_issue(issue)
+
+                    # Finalize issue tracking and export to CSV
+                    if self.current_issue_tracker:
+                        issue_report = self.current_issue_tracker.finalize_issue('completed')
+                        self.csv_exporter.export_issue(self.run_logger.run_id, issue_report)
+                        self.run_logger.record_success()
+
                     return True  # Success!
                 else:
                     await self._update_pipeline_stage("review", "failed")
 
             except Exception as e:
                 print(f"[ISSUE #{issue_id}] Implementation failed: {e}")
+
+                # Track error in issue tracker
+                if self.current_issue_tracker:
+                    self.current_issue_tracker.errors.append({
+                        'type': 'implementation_error',
+                        'message': str(e),
+                        'agent': 'supervisor',
+                        'timestamp': datetime.now().isoformat()
+                    })
+
                 if attempt < retries - 1:
                     continue  # Retry
                 return False  # Final failure
 
-        # All retries failed
+        # All retries failed - finalize issue as failed
+        if self.current_issue_tracker:
+            issue_report = self.current_issue_tracker.finalize_issue('failed')
+            self.csv_exporter.export_issue(self.run_logger.run_id, issue_report)
+            self.run_logger.record_error()
+
         return False
 
     async def execute(self, mode: str = "implement", specific_issue: str = None, resume: bool = False):
@@ -278,6 +329,10 @@ class Supervisor:
         print(f"Project: {self.project_id}")
         print(f"Mode: {mode}")
         print(f"State: {self.state.value}")
+
+        # Update run logger with execution mode
+        self.run_logger.mode = mode
+        self.run_logger.specific_issue = specific_issue
 
         if resume:
             print("[WARNING] Resume functionality is not currently implemented")
@@ -463,6 +518,30 @@ class Supervisor:
             self.state = ExecutionState.FAILED
             print("\nORCHESTRATION FAILED")
 
+        # Finalize run and export to CSV
+        final_status = 'completed' if self.state == ExecutionState.COMPLETED else 'failed'
+        self.run_logger.finalize_run(final_status)
+
+        # Export run summary to CSV
+        run_data = {
+            'run_id': self.run_logger.run_id,
+            'project_id': self.project_id,
+            'start_time': self.run_logger.start_time.isoformat(),
+            'end_time': self.run_logger.end_time.isoformat() if self.run_logger.end_time else None,
+            'duration_seconds': (self.run_logger.end_time - self.run_logger.start_time).total_seconds() if self.run_logger.end_time else 0,
+            'llm_configuration': self.run_logger.llm_config,
+            'execution_mode': self.run_logger.mode,
+            'specific_issue': self.run_logger.specific_issue,
+            'status': final_status,
+            'total_issues': len(self.run_logger.issues_processed),
+            'total_successes': self.run_logger.total_successes,
+            'total_errors': self.run_logger.total_errors,
+            'success_rate': (self.run_logger.total_successes / len(self.run_logger.issues_processed) * 100) if self.run_logger.issues_processed else 0
+        }
+        self.csv_exporter.export_run(run_data)
+
+        print(f"\n[ANALYTICS] CSV files exported to: {self.csv_exporter.csv_dir}")
+
         # Clean up
         await self.cleanup()
 
@@ -514,12 +593,13 @@ async def run_supervisor(
     mode: str = "implement",
     specific_issue: str = None,
     resume_from: str = None,
-    tech_stack: dict = None
+    tech_stack: dict = None,
+    llm_config: dict = None
 ):
     """
     Helper function to run supervisor with the specified parameters.
     """
-    supervisor = Supervisor(project_id, tech_stack=tech_stack)
+    supervisor = Supervisor(project_id, tech_stack=tech_stack, llm_config=llm_config)
 
     # Map mode to supervisor execution mode
     exec_mode = "implement" if mode == "implement" else "analyze"

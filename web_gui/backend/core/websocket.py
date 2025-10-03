@@ -143,6 +143,13 @@ class ConnectionManager:
             "testing": tech_stack.get("testing", "unknown")
         })
 
+    async def send_mcp_log(self, message: str, level: str = "info"):
+        """Send MCP server log to all clients"""
+        await self.send_event("mcp_log", {
+            "message": message,
+            "level": level
+        })
+
 
 # Global connection manager instance
 ws_manager = ConnectionManager()

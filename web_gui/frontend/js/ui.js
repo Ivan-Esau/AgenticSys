@@ -51,7 +51,7 @@ class UIManager {
 
             // Output areas
             agentOutput: document.getElementById('agentOutput'),
-            toolList: document.getElementById('toolList'),
+            mcpLogsOutput: document.getElementById('mcpLogsOutput'),
 
             // Pipeline stages
             stages: {
@@ -221,37 +221,46 @@ class UIManager {
         this.elements.agentOutput.scrollTop = this.elements.agentOutput.scrollHeight;
     }
 
-    addToolUsage(agent, tool, duration, success = true, timestamp = null) {
+    addMCPLog(message, level = 'info', timestamp = null) {
         const time = timestamp || new Date().toLocaleTimeString();
         const entry = document.createElement('div');
-        entry.className = 'tool-entry';
+        entry.className = `output-entry level-${level}`;
+
+        // Determine icon based on level
+        let icon = '[i]';
+        if (level === 'error') icon = '[X]';
+        else if (level === 'warning') icon = '[!]';
+        else if (level === 'success') icon = '[✓]';
+        else if (level === 'debug') icon = '[D]';
+
         entry.innerHTML = `
-            <div class="tool-header">
-                <span class="tool-name">${tool}</span>
-                <span class="tool-duration">${duration}ms</span>
-            </div>
-            <div class="tool-agent">Agent: ${agent}</div>
-            <div class="tool-status ${success ? 'success' : 'failed'}">
-                ${success ? '✅ Success' : '❌ Failed'}
-            </div>
-            <div class="tool-time">${time}</div>
+            <span class="output-time">${time}</span>
+            <span class="output-agent">[MCP]</span>
+            <span class="output-icon">${icon}</span>
+            <span class="output-text">${this.escapeHtml(message)}</span>
         `;
 
         // Clear placeholder message if present
-        const placeholder = this.elements.toolList.querySelector('.tool-message');
+        const placeholder = this.elements.mcpLogsOutput.querySelector('.output-message');
         if (placeholder) {
             placeholder.remove();
         }
 
-        this.elements.toolList.appendChild(entry);
-        this.elements.toolList.scrollTop = this.elements.toolList.scrollHeight;
+        this.elements.mcpLogsOutput.appendChild(entry);
+        this.elements.mcpLogsOutput.scrollTop = this.elements.mcpLogsOutput.scrollHeight;
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     clearOutput() {
         this.elements.agentOutput.innerHTML =
             '<div class="output-message">Output cleared. Waiting for new messages...</div>';
-        this.elements.toolList.innerHTML =
-            '<div class="tool-message">No tool usage yet.</div>';
+        this.elements.mcpLogsOutput.innerHTML =
+            '<div class="output-message">No MCP server logs yet.</div>';
     }
 
     // Statistics

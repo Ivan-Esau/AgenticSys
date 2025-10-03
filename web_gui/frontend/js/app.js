@@ -118,17 +118,12 @@ class App {
             );
         });
 
-        // Tool events
-        this.ws.on('tool_start', (data) => {
-            // Could show real-time tool start if desired
-        });
-
-        this.ws.on('tool_end', (data) => {
-            this.ui.addToolUsage(
-                data.agent,
-                data.tool,
-                data.duration_ms,
-                data.success
+        // MCP Log events
+        this.ws.on('mcp_log', (data) => {
+            this.ui.addMCPLog(
+                data.message,
+                data.level || 'info',
+                data.timestamp
             );
         });
 

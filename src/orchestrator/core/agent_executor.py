@@ -45,6 +45,9 @@ class AgentExecutor:
         # Review Agent MUST validate the SAME pipeline (not a different/older one)
         self.testing_pipeline_id = None  # Testing Agent's pipeline ID (source of truth)
         self.current_pipeline_id = None  # Review Agent's pipeline ID (must match above!)
+
+        # Analytics tracking (set by supervisor)
+        self.issue_tracker = None  # Will be set by supervisor per issue
     
     def _check_agent_success(self, agent_type: str, result: str) -> tuple[bool, float]:
         """
@@ -112,6 +115,10 @@ class AgentExecutor:
         """
         execution_id = self._start_execution_tracking("planning", {"apply": apply})
 
+        # Track agent start in issue tracker
+        if self.issue_tracker:
+            self.issue_tracker.start_agent('planning')
+
         try:
             print("\n[AGENT EXECUTOR] Executing Planning Agent...")
             print(f"[AGENT EXECUTOR] Mode: {'Implementation' if apply else 'Analysis'}")
@@ -145,15 +152,21 @@ class AgentExecutor:
                 print("[AGENT EXECUTOR] Planning agent execution successful")
             else:
                 print("[AGENT EXECUTOR] Planning agent validation failed")
-            
+
+            # Track agent end in issue tracker
+            if self.issue_tracker:
+                self.issue_tracker.end_agent('planning', success)
+
             self._end_execution_tracking(execution_id, "success" if success else "failed")
             return success
-            
+
         except asyncio.TimeoutError:
             print("[AGENT EXECUTOR] Planning agent timed out (10min limit)")
+            if self.issue_tracker:
+                self.issue_tracker.end_agent('planning', False)
             self._end_execution_tracking(execution_id, "timeout", "Execution timeout")
             return False
-            
+
         except Exception as e:
             print(f"[AGENT EXECUTOR] Planning agent failed: {e}")
             print(f"[AGENT EXECUTOR] Error type: {type(e).__name__}")
@@ -162,6 +175,8 @@ class AgentExecutor:
             if "tool decorator" in str(e):
                 print("[AGENT EXECUTOR] Tool compatibility issue detected")
                 print("[AGENT EXECUTOR] This may be due to MCP tool format incompatibility")
+            if self.issue_tracker:
+                self.issue_tracker.end_agent('planning', False)
             self._end_execution_tracking(execution_id, "error", str(e))
             return False
     
@@ -175,7 +190,11 @@ class AgentExecutor:
         Execute coding agent for a specific issue.
         """
         execution_id = self._start_execution_tracking("coding", {"issue_id": issue.get("iid"), "branch": branch})
-        
+
+        # Track agent start in issue tracker
+        if self.issue_tracker:
+            self.issue_tracker.start_agent('coding')
+
         try:
             print(f"\n[AGENT EXECUTOR] Executing Coding Agent for Issue #{issue.get('iid')}...")
             
@@ -193,12 +212,18 @@ class AgentExecutor:
             
             # Check for success
             success, confidence = self._check_agent_success("coding", result or "")
-            
+
+            # Track agent end in issue tracker
+            if self.issue_tracker:
+                self.issue_tracker.end_agent('coding', success)
+
             self._end_execution_tracking(execution_id, "success" if success else "failed")
             return success
-            
+
         except Exception as e:
             print(f"[AGENT EXECUTOR] [FAIL] Coding agent failed: {e}")
+            if self.issue_tracker:
+                self.issue_tracker.end_agent('coding', False)
             self._end_execution_tracking(execution_id, "error", str(e))
             return False
     
@@ -212,6 +237,10 @@ class AgentExecutor:
         Execute testing agent for a specific issue.
         """
         execution_id = self._start_execution_tracking("testing", {"issue_id": issue.get("iid"), "branch": branch})
+
+        # Track agent start in issue tracker
+        if self.issue_tracker:
+            self.issue_tracker.start_agent('testing')
 
         try:
             print(f"\n[AGENT EXECUTOR] Executing Testing Agent for Issue #{issue.get('iid')}...")
@@ -239,11 +268,25 @@ class AgentExecutor:
                     self.testing_pipeline_id = pipeline_id
                     print(f"[AGENT EXECUTOR] Stored Testing Agent pipeline: #{pipeline_id}")
 
+                    # Track pipeline attempt in issue tracker
+                    if self.issue_tracker:
+                        self.issue_tracker.record_pipeline_attempt(
+                            pipeline_id=pipeline_id,
+                            status='success' if success else 'failed',
+                            commit_sha=None  # Could extract from result if needed
+                        )
+
+            # Track agent end in issue tracker
+            if self.issue_tracker:
+                self.issue_tracker.end_agent('testing', success)
+
             self._end_execution_tracking(execution_id, "success" if success else "failed")
             return success
             
         except Exception as e:
             print(f"[AGENT EXECUTOR] [FAIL] Testing agent failed: {e}")
+            if self.issue_tracker:
+                self.issue_tracker.end_agent('testing', False)
             self._end_execution_tracking(execution_id, "error", str(e))
             return False
     
@@ -257,7 +300,11 @@ class AgentExecutor:
         Execute review agent for a specific issue.
         """
         execution_id = self._start_execution_tracking("review", {"issue_id": issue.get("iid"), "branch": branch})
-        
+
+        # Track agent start in issue tracker
+        if self.issue_tracker:
+            self.issue_tracker.start_agent('review')
+
         try:
             print(f"\n[AGENT EXECUTOR] Executing Review Agent for Issue #{issue.get('iid')}...")
             
@@ -325,11 +372,17 @@ class AgentExecutor:
                     print(f"[AGENT EXECUTOR] [WARN] WARNING: Review claimed completion but no merge confirmation")
                     success = False
 
+            # Track agent end in issue tracker
+            if self.issue_tracker:
+                self.issue_tracker.end_agent('review', success)
+
             self._end_execution_tracking(execution_id, "success" if success else "failed")
             return success
-            
+
         except Exception as e:
             print(f"[AGENT EXECUTOR] [FAIL] Review agent failed: {e}")
+            if self.issue_tracker:
+                self.issue_tracker.end_agent('review', False)
             self._end_execution_tracking(execution_id, "error", str(e))
             return False
     

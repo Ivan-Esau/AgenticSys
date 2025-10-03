@@ -134,8 +134,20 @@ class SystemOrchestrator:
             "info"
         )
 
+        # Prepare LLM configuration for analytics
+        llm_config = {
+            'provider': config.get('llm_provider', 'unknown'),
+            'model': config.get('llm_model', 'unknown'),
+            'temperature': config.get('llm_temperature', 0.0)
+        }
+
+        # Create MCP log callback for WebSocket integration
+        async def mcp_log_callback(message: str, level: str = "info"):
+            """Send MCP logs to WebSocket"""
+            await self.ws_manager.send_mcp_log(message, level)
+
         # Create supervisor instance
-        self.supervisor = Supervisor(project_id, tech_stack)
+        self.supervisor = Supervisor(project_id, tech_stack, llm_config, mcp_log_callback)
 
         # Set additional configuration
         if config.get('min_coverage'):
@@ -188,8 +200,20 @@ class SystemOrchestrator:
             "info"
         )
 
+        # Prepare LLM configuration for analytics
+        llm_config = {
+            'provider': config.get('llm_provider', 'unknown'),
+            'model': config.get('llm_model', 'unknown'),
+            'temperature': config.get('llm_temperature', 0.0)
+        }
+
+        # Create MCP log callback for WebSocket integration
+        async def mcp_log_callback(message: str, level: str = "info"):
+            """Send MCP logs to WebSocket"""
+            await self.ws_manager.send_mcp_log(message, level)
+
         # Create supervisor instance with project ID and tech stack
-        self.supervisor = Supervisor(project_id, tech_stack)
+        self.supervisor = Supervisor(project_id, tech_stack, llm_config, mcp_log_callback)
 
         # Set additional configuration
         if config.get('min_coverage'):
@@ -414,7 +438,7 @@ class SystemOrchestrator:
             "current_issue": self.current_issue,
             "current_branch": self.current_branch,
             "progress": self._calculate_progress(),
-            "start_time": self.start_time,
+            "start_time": self.start_time.isoformat() if self.start_time else None,
             "stats": self.stats
         }
 

@@ -10,24 +10,36 @@ from typing import Tuple, List, Any, Optional
 # Global cache for MCP connection
 _mcp_cache: Optional[Tuple[List[Any], MultiServerMCPClient]] = None
 
-async def load_mcp_tools() -> Tuple[List[Any], MultiServerMCPClient]:
+async def load_mcp_tools(log_callback=None) -> Tuple[List[Any], MultiServerMCPClient]:
     """
     Initialize MCP client and load GitLab tools.
     Uses caching to avoid recreating connections.
+
+    Args:
+        log_callback: Optional async function to send logs (for WebSocket integration)
 
     Returns:
         Tuple of (tools list, MCP client instance)
     """
     global _mcp_cache
 
+    async def log(message: str, level: str = "info"):
+        """Helper to log both to console and WebSocket"""
+        print(message)
+        if log_callback:
+            try:
+                await log_callback(message, level)
+            except:
+                pass  # Don't fail if WebSocket logging fails
+
     # Return cached connection if available
     if _mcp_cache is not None:
         tools, client = _mcp_cache
-        print(f"[MCP] Using cached connection ({len(tools)} tools)")
+        await log(f"[MCP] Using cached connection ({len(tools)} tools)", "info")
         return tools, client
 
     url = Config.get_mcp_url()
-    print(f"[MCP] Connecting to {url}...")
+    await log(f"[MCP] Connecting to {url}...", "info")
 
     # Suppress MCP initialization errors/warnings
     import logging
@@ -73,7 +85,7 @@ async def load_mcp_tools() -> Tuple[List[Any], MultiServerMCPClient]:
         try:
             # Add timeout to prevent hanging
             tools, client = await asyncio.wait_for(init_client(), timeout=10.0)
-            print(f"[MCP] Successfully connected! Loaded {len(tools)} tools")
+            await log(f"[MCP] Successfully connected! Loaded {len(tools)} tools", "success")
 
             # Cache the connection for reuse
             _mcp_cache = (tools, client)
@@ -82,12 +94,12 @@ async def load_mcp_tools() -> Tuple[List[Any], MultiServerMCPClient]:
             return tools, client
 
         except asyncio.TimeoutError:
-            print(f"[MCP] ERROR: Connection timeout after 10 seconds!")
-            print(f"[MCP] Please check if MCP server is running at {url}")
+            await log(f"[MCP] ERROR: Connection timeout after 10 seconds!", "error")
+            await log(f"[MCP] Please check if MCP server is running at {url}", "error")
             raise RuntimeError(f"MCP connection timeout - server may be down or unresponsive")
         except Exception as e:
             # Show connection errors to help debug
-            print(f"[MCP] Warning: Error during MCP initialization: {str(e)[:100]}")
+            await log(f"[MCP] Warning: Error during MCP initialization: {str(e)[:100]}", "warning")
             raise
 
     finally:
@@ -105,20 +117,23 @@ def clear_mcp_cache():
     print("[MCP] Cache cleared - next call will create new connection")
 
 
-async def get_common_tools_and_client() -> Tuple[List[Any], MultiServerMCPClient]:
+async def get_common_tools_and_client(log_callback=None) -> Tuple[List[Any], MultiServerMCPClient]:
     """
     Get common tools and MCP client for agents.
     This is the primary entry point for agents needing GitLab tools.
-    
+
+    Args:
+        log_callback: Optional async function to send logs (for WebSocket integration)
+
     Returns:
         Tuple of (tools list, MCP client instance)
     """
     # Validate configuration before connecting
     if not Config.validate():
         raise ValueError("Invalid configuration. Please check your .env file.")
-    
-    tools, client = await load_mcp_tools()
-    
+
+    tools, client = await load_mcp_tools(log_callback)
+
     return tools, client
 
 
