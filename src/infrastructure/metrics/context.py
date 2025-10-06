@@ -25,22 +25,22 @@ class MetricsContext:
         self.collector = collector
 
     @contextmanager
-    def track_issue(self, issue_id: int):
+    def track_issue(self, issue_iid: int):
         """
         Context manager for tracking an issue.
 
         Usage:
-            with metrics.track_issue(issue_id=3):
+            with metrics.track_issue(issue_iid=3):
                 # Work on issue
                 pass
 
         Args:
-            issue_id: Issue ID to track
+            issue_iid: Issue IID (project-specific internal ID) to track
 
         Yields:
             Issue metrics object
         """
-        issue_metrics = self.collector.start_issue(issue_id)
+        issue_metrics = self.collector.start_issue(issue_iid)
 
         try:
             yield issue_metrics
@@ -49,26 +49,26 @@ class MetricsContext:
             pass
 
     @contextmanager
-    def track_agent(self, agent_type: AgentType, issue_id: int,
+    def track_agent(self, agent_type: AgentType, issue_iid: int,
                     attempt_number: int = 1):
         """
         Context manager for tracking an agent execution.
 
         Usage:
-            with metrics.track_agent(AgentType.CODING, issue_id=3) as agent:
+            with metrics.track_agent(AgentType.CODING, issue_iid=3) as agent:
                 # Agent work
                 agent.success = True
 
         Args:
             agent_type: Type of agent
-            issue_id: Issue being worked on
+            issue_iid: Issue IID (project-specific internal ID) being worked on
             attempt_number: Attempt number
 
         Yields:
             Agent metrics object
         """
         agent_metrics = self.collector.start_agent(
-            agent_type, issue_id, attempt_number
+            agent_type, issue_iid, attempt_number
         )
 
         success = False
@@ -167,7 +167,7 @@ def track_agent_execution(agent_type: AgentType, collector: MetricsCollector):
 
     Usage:
         @track_agent_execution(AgentType.CODING, metrics_collector)
-        async def execute_coding_agent(issue_id: int):
+        async def execute_coding_agent(issue_iid: int):
             # Agent logic
             return True
 
@@ -179,11 +179,11 @@ def track_agent_execution(agent_type: AgentType, collector: MetricsCollector):
         Decorated function
     """
     def decorator(func):
-        async def wrapper(issue_id: int, *args, **kwargs):
+        async def wrapper(issue_iid: int, *args, **kwargs):
             context = MetricsContext(collector)
 
-            with context.track_agent(agent_type, issue_id):
-                result = await func(issue_id, *args, **kwargs)
+            with context.track_agent(agent_type, issue_iid):
+                result = await func(issue_iid, *args, **kwargs)
                 return result
 
         return wrapper

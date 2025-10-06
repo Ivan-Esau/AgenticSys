@@ -62,8 +62,8 @@ class PlanningManager:
         filtered_issues = []
         for issue in prioritized_issues:
             if await is_completed_func(issue):
-                issue_id = issue.get('iid') or issue.get('id')
-                print(f"[SKIP] Issue #{issue_id} already completed/merged")
+                issue_iid = issue.get('iid') or issue.get('id')
+                print(f"[SKIP] Issue #{issue_iid} already completed/merged")
                 continue
             filtered_issues.append(issue)
 
@@ -186,9 +186,9 @@ class PlanningManager:
 
         if 'issues' in plan_data:
             for planned_issue in plan_data['issues']:
-                issue_id = str(planned_issue.get('id') or planned_issue.get('iid', ''))
-                if issue_id in issue_map:
-                    prioritized.append(issue_map[issue_id])
+                issue_iid = str(planned_issue.get('id') or planned_issue.get('iid', ''))
+                if issue_iid in issue_map:
+                    prioritized.append(issue_map[issue_iid])
 
         # Add any remaining issues
         for issue in all_issues:
@@ -355,3 +355,51 @@ class PlanningManager:
     def get_current_plan(self) -> Any:
         """Get the current stored plan."""
         return self.current_plan
+
+    async def load_plan_from_repository(self, mcp_client, project_id: str, ref: str = "master") -> bool:
+        """
+        Load ORCH_PLAN.json from the repository after planning branch is merged.
+
+        Args:
+            mcp_client: MCP client for GitLab API calls
+            project_id: GitLab project ID
+            ref: Branch/ref to load from (default: master)
+
+        Returns:
+            bool: True if plan was loaded successfully, False otherwise
+        """
+        try:
+            print(f"[PLANNING] Loading ORCH_PLAN.json from {ref} branch...")
+
+            # Try to get ORCH_PLAN.json from docs/ directory
+            result = await mcp_client.run_tool("get_file_contents", {
+                "project_id": str(project_id),
+                "file_path": "docs/ORCH_PLAN.json",
+                "ref": ref
+            })
+
+            if result and isinstance(result, str):
+                import json
+                try:
+                    plan_json = json.loads(result)
+
+                    # Validate it has the required structure
+                    if 'implementation_order' in plan_json:
+                        self.current_plan = plan_json
+                        print(f"[PLANNING] ✅ Loaded ORCH_PLAN.json with {len(plan_json.get('implementation_order', []))} issues")
+                        print(f"[PLANNING] Implementation order: {plan_json.get('implementation_order', [])}")
+                        return True
+                    else:
+                        print("[PLANNING] ⚠️ ORCH_PLAN.json missing 'implementation_order' field")
+                        return False
+
+                except json.JSONDecodeError as e:
+                    print(f"[PLANNING] ⚠️ Failed to parse ORCH_PLAN.json: {e}")
+                    return False
+            else:
+                print("[PLANNING] ⚠️ ORCH_PLAN.json not found in repository")
+                return False
+
+        except Exception as e:
+            print(f"[PLANNING] ⚠️ Error loading ORCH_PLAN.json: {e}")
+            return False

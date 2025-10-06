@@ -79,7 +79,7 @@ class MetricsStorage:
         issue_dir = self.runs_dir / run_id / "issues"
         issue_dir.mkdir(parents=True, exist_ok=True)
 
-        metrics_file = issue_dir / f"issue_{issue_metrics.issue_id}_metrics.json"
+        metrics_file = issue_dir / f"issue_{issue_metrics.issue_iid}_metrics.json"
 
         # Atomic write
         self._atomic_json_write(metrics_file, issue_metrics.to_dict())
@@ -95,7 +95,7 @@ class MetricsStorage:
         issue_dir = self.runs_dir / run_id / "issues"
         issue_dir.mkdir(parents=True, exist_ok=True)
 
-        report_file = issue_dir / f"issue_{issue_metrics.issue_id}_report.json"
+        report_file = issue_dir / f"issue_{issue_metrics.issue_iid}_report.json"
 
         # Atomic write
         self._atomic_json_write(report_file, issue_metrics.to_dict())
@@ -169,7 +169,7 @@ class MetricsStorage:
             with open(issues_csv, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow([
-                    'run_id', 'issue_id', 'start_time', 'end_time', 'duration_seconds',
+                    'run_id', 'issue_iid', 'start_time', 'end_time', 'duration_seconds',
                     'status', 'total_agent_attempts', 'successful_agents', 'failed_agents',
                     'pipeline_success_count', 'pipeline_failure_count',
                     'total_debugging_cycles', 'resolved_debugging_cycles',
@@ -185,7 +185,7 @@ class MetricsStorage:
             with open(agents_csv, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow([
-                    'run_id', 'issue_id', 'agent_type', 'attempt_number',
+                    'run_id', 'issue_iid', 'agent_type', 'attempt_number',
                     'start_time', 'end_time', 'duration_seconds', 'status',
                     'success', 'retry_count', 'tool_calls_count',
                     'input_tokens', 'output_tokens', 'total_tokens', 'cost_usd',
@@ -198,7 +198,7 @@ class MetricsStorage:
             with open(pipelines_csv, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow([
-                    'run_id', 'issue_id', 'pipeline_id', 'commit_sha',
+                    'run_id', 'issue_iid', 'pipeline_id', 'commit_sha',
                     'triggered_by', 'retry_attempt', 'status',
                     'start_time', 'end_time', 'duration_seconds',
                     'queue_time_seconds', 'execution_time_seconds',
@@ -211,7 +211,7 @@ class MetricsStorage:
             with open(tools_csv, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow([
-                    'run_id', 'issue_id', 'agent_type', 'tool_name',
+                    'run_id', 'issue_iid', 'agent_type', 'tool_name',
                     'call_count', 'success_count', 'failure_count',
                     'avg_duration_ms', 'total_duration_ms'
                 ])
@@ -222,7 +222,7 @@ class MetricsStorage:
             with open(debugging_csv, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow([
-                    'run_id', 'issue_id', 'agent', 'error_type', 'error_message',
+                    'run_id', 'issue_iid', 'agent', 'error_type', 'error_message',
                     'start_time', 'end_time', 'duration_seconds',
                     'attempts', 'resolved', 'resolution_method'
                 ])
@@ -233,7 +233,7 @@ class MetricsStorage:
             with open(errors_csv, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow([
-                    'run_id', 'issue_id', 'agent', 'error_type', 'error_message',
+                    'run_id', 'issue_iid', 'agent', 'error_type', 'error_message',
                     'severity', 'timestamp'
                 ])
 
@@ -293,7 +293,7 @@ class MetricsStorage:
             writer = csv.writer(f)
             writer.writerow([
                 run_id,
-                issue_metrics.issue_id,
+                issue_metrics.issue_iid,
                 issue_metrics.start_time.isoformat(),
                 issue_metrics.end_time.isoformat() if issue_metrics.end_time else '',
                 issue_metrics.duration_seconds,
@@ -344,7 +344,7 @@ class MetricsStorage:
             for agent in issue_metrics.agent_executions:
                 writer.writerow([
                     run_id,
-                    issue_metrics.issue_id,
+                    issue_metrics.issue_iid,
                     agent.agent_type.value,
                     agent.attempt_number,
                     agent.start_time.isoformat(),
@@ -371,7 +371,7 @@ class MetricsStorage:
             for pipeline in issue_metrics.pipelines:
                 writer.writerow([
                     run_id,
-                    issue_metrics.issue_id,
+                    issue_metrics.issue_iid,
                     pipeline.pipeline_id,
                     pipeline.commit_sha,
                     pipeline.triggered_by,
@@ -398,7 +398,7 @@ class MetricsStorage:
                 for tool_name, stats in agent.tool_stats.items():
                     writer.writerow([
                         run_id,
-                        issue_metrics.issue_id,
+                        issue_metrics.issue_iid,
                         agent.agent_type.value,
                         tool_name,
                         stats.call_count,
@@ -418,7 +418,7 @@ class MetricsStorage:
             for cycle in issue_metrics.debugging_cycles:
                 writer.writerow([
                     run_id,
-                    issue_metrics.issue_id,
+                    issue_metrics.issue_iid,
                     cycle.agent,
                     cycle.error_type,
                     cycle.error_message,
@@ -440,7 +440,7 @@ class MetricsStorage:
             for error in issue_metrics.errors:
                 writer.writerow([
                     run_id,
-                    issue_metrics.issue_id,
+                    issue_metrics.issue_iid,
                     error.get('agent', ''),
                     error.get('type', ''),
                     error.get('message', ''),

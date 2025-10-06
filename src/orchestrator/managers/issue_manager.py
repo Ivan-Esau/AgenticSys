@@ -5,8 +5,14 @@ Handles issue tracking, validation, implementation, and completion checking.
 
 import asyncio
 import json
-import re
 from typing import Dict, List, Optional, Any
+
+from ..utils.issue_helpers import (
+    get_issue_iid,
+    get_issue_title,
+    validate_issue_structure,
+    create_feature_branch_name as create_branch_name
+)
 
 
 class IssueManager:
@@ -15,43 +21,55 @@ class IssueManager:
     """
 
     def __init__(self, project_id: str, tools: List[Any]):
-        self.project_id = project_id
-        self.tools = tools
+        self.project_id: str = project_id
+        self.tools: List[Any] = tools
 
-        # Issue tracking
-        self.gitlab_issues = []
-        self.implementation_queue = []
-        self.completed_issues = []
-        self.failed_issues = []
+        # Issue tracking with proper type annotations
+        self.gitlab_issues: List[Dict[str, Any]] = []
+        self.implementation_queue: List[Dict[str, Any]] = []
+        self.completed_issues: List[Dict[str, Any]] = []
+        self.failed_issues: List[Dict[str, Any]] = []
 
         # Current issue being processed
-        self.current_issue_number = None
-        self.current_issue_title = None
+        self.current_issue_number: Optional[int] = None
+        self.current_issue_title: Optional[str] = None
 
         # Retry configuration
-        self.max_retries = 3
-        self.retry_delay = 5
+        self.max_retries: int = 3
+        self.retry_delay: int = 5
 
-    def validate_issue(self, issue: Dict) -> bool:
-        """Simple issue validation."""
-        if not isinstance(issue, dict):
-            print(f"[VALIDATION] Issue must be a dictionary")
-            return False
-        if "iid" not in issue or "title" not in issue:
-            print(f"[VALIDATION] Issue missing required fields (iid or title)")
+    def validate_issue(self, issue: Dict[str, Any]) -> bool:
+        """
+        Simple issue validation using standardized helper.
+
+        Args:
+            issue: Issue dictionary to validate
+
+        Returns:
+            True if valid, False otherwise
+        """
+        if not validate_issue_structure(issue):
+            print(f"[VALIDATION] Issue missing required fields (iid/id or title)")
             return False
         return True
 
-    def create_feature_branch_name(self, issue: Dict) -> str:
-        """Create a feature branch name from issue details."""
-        issue_id = issue.get('iid')
-        issue_title = issue.get('title', '')
+    def create_feature_branch_name(self, issue: Dict[str, Any]) -> str:
+        """
+        Create a feature branch name from issue details using standardized helper.
 
-        # Clean the title: remove special chars, replace spaces with hyphens
-        issue_slug = re.sub(r'[^a-zA-Z0-9\s-]', '', issue_title).lower()
-        issue_slug = re.sub(r'\s+', '-', issue_slug).strip('-')[:30]
+        Args:
+            issue: Issue dictionary
 
-        return f"feature/issue-{issue_id}-{issue_slug}"
+        Returns:
+            Feature branch name in format: feature/issue-<iid>-<slug>
+        """
+        issue_iid = get_issue_iid(issue)
+        issue_title = get_issue_title(issue)
+
+        if not issue_iid:
+            raise ValueError("Issue must have an iid or id field")
+
+        return create_branch_name(issue_iid, issue_title)
 
     async def fetch_gitlab_issues(self) -> List[Dict[str, Any]]:
         """
@@ -93,50 +111,22 @@ class IssueManager:
     async def is_issue_completed(self, issue: Dict[str, Any]) -> bool:
         """
         Check if an issue has already been completed/merged.
-        Enhanced with better completion detection to avoid retry loops.
+
+        CRITICAL: An issue is only "completed" if there's a MERGED MR for it.
+        Issue state (open/closed) is NOT enough - the branch must be merged.
         """
-        issue_id = issue.get('iid') or issue.get('id')
-        if not issue_id:
+        issue_iid = get_issue_iid(issue)
+        if not issue_iid:
             return False
 
         try:
-            # Check if issue is closed
-            if issue.get('state') == 'closed':
-                print(f"[CHECK] Issue #{issue_id} is closed - marking as completed")
-                return True
-
-            # Check if there's already a merged branch for this issue
-            branch_pattern = f"feature/issue-{issue_id}-"
-
-            # Get list of branches
-            list_branches_tool = self._get_tool('list_branches')
-
-            if list_branches_tool:
-                branches_response = await list_branches_tool.ainvoke({
-                    "project_id": self.project_id
-                })
-
-                if isinstance(branches_response, str):
-                    try:
-                        branches = json.loads(branches_response)
-                        if isinstance(branches, list):
-                            # Check if feature branch exists (might indicate work in progress)
-                            for branch in branches:
-                                branch_name = branch.get('name', '')
-                                if branch_name.startswith(branch_pattern):
-                                    # Branch exists, but check if it's been merged
-                                    print(f"[CHECK] Found branch {branch_name} for issue #{issue_id}")
-                                    return False  # Work in progress, don't skip
-                    except json.JSONDecodeError:
-                        pass
-
-            # Check merge requests for this issue
+            # STEP 1: Check for merged MRs mentioning this issue
             list_mrs_tool = self._get_tool('list_merge_requests')
 
             if list_mrs_tool:
                 mrs_response = await list_mrs_tool.ainvoke({
                     "project_id": self.project_id,
-                    "state": "merged"
+                    "state": "merged"  # Only check MERGED MRs
                 })
 
                 if isinstance(mrs_response, str):
@@ -148,47 +138,90 @@ class IssueManager:
                                 mr_description = mr.get('description', '').lower()
                                 source_branch = mr.get('source_branch', '')
 
-                                # Check if MR mentions this issue or uses issue branch pattern
-                                if (f"#{issue_id}" in mr_title or
-                                    f"#{issue_id}" in mr_description or
-                                    f"issue-{issue_id}" in source_branch or
-                                    f"closes #{issue_id}" in mr_description):
-                                    print(f"[CHECK] Issue #{issue_id} already merged in MR: {mr.get('title')}")
-                                    return True
+                                # Check if MR is for this issue
+                                if (f"#{issue_iid}" in mr_title or
+                                    f"#{issue_iid}" in mr_description or
+                                    f"issue-{issue_iid}" in source_branch or
+                                    f"closes #{issue_iid}" in mr_description):
+                                    print(f"[CHECK] Issue #{issue_iid} already merged via MR: {mr.get('title')}")
+                                    return True  # Found merged MR - truly completed
                     except json.JSONDecodeError:
                         pass
 
-        except Exception as e:
-            print(f"[CHECK] Error checking completion status for issue #{issue_id}: {e}")
+            # STEP 2: No merged MR found - check if work is in progress
+            # If issue is closed but no merged MR, the branch might still need merging!
+            if issue.get('state') == 'closed':
+                print(f"[CHECK] Issue #{issue_iid} is closed but NO merged MR found")
+                print(f"[CHECK] Will check if feature branch exists and needs merging...")
 
+                # Check if feature branch exists
+                branch_pattern = f"feature/issue-{issue_iid}-"
+                list_branches_tool = self._get_tool('list_branches')
+
+                if list_branches_tool:
+                    branches_response = await list_branches_tool.ainvoke({
+                        "project_id": self.project_id
+                    })
+
+                    if isinstance(branches_response, str):
+                        try:
+                            branches = json.loads(branches_response)
+                            if isinstance(branches, list):
+                                for branch in branches:
+                                    branch_name = branch.get('name', '')
+                                    if branch_name.startswith(branch_pattern):
+                                        print(f"[CHECK] Found unmerged branch: {branch_name}")
+                                        print(f"[CHECK] Issue #{issue_iid} needs review/merge - NOT completed")
+                                        return False  # Branch exists unmerged - needs work!
+                        except json.JSONDecodeError:
+                            pass
+
+                # Issue closed, no branch found, no merged MR
+                # This is edge case - issue might have been closed without implementation
+                print(f"[CHECK] Issue #{issue_iid} closed with no branch or MR - treating as completed")
+                return True
+
+        except Exception as e:
+            print(f"[CHECK] Error checking completion status for issue #{issue_iid}: {e}")
+
+        # Default: Not completed
         return False
 
     def track_completed_issue(self, issue: Dict[str, Any]):
         """
         Track completed issue and show progress.
+
+        Args:
+            issue: Completed issue dictionary
         """
-        issue_id = issue.get('iid') or issue.get('id')
+        issue_iid = get_issue_iid(issue)
         self.completed_issues.append(issue)
         total = len(self.gitlab_issues) if self.gitlab_issues else 0
         completed = len(self.completed_issues)
 
         if total > 0:
-            print(f"[PROGRESS] Issue #{issue_id} completed ({completed}/{total} done)")
+            print(f"[PROGRESS] Issue #{issue_iid} completed ({completed}/{total} done)")
 
     def track_failed_issue(self, issue: Dict[str, Any]):
         """
         Track failed issue.
+
+        Args:
+            issue: Failed issue dictionary
         """
-        issue_id = issue.get('iid') or issue.get('id')
+        issue_iid = get_issue_iid(issue)
         self.failed_issues.append(issue)
-        print(f"[WARNING] Issue #{issue_id} failed after {self.max_retries} attempts")
+        print(f"[WARNING] Issue #{issue_iid} failed after {self.max_retries} attempts")
 
     def get_summary_stats(self) -> Dict[str, Any]:
         """
         Get summary statistics for issues.
+
+        Returns:
+            Dictionary with issue statistics
         """
         total_issues = len(self.completed_issues) + len(self.failed_issues)
-        success_rate = 0
+        success_rate: float = 0.0  # Use float from the start
 
         if total_issues > 0:
             success_rate = (len(self.completed_issues) / total_issues) * 100

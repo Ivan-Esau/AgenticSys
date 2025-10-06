@@ -17,6 +17,9 @@ from .core import PerformanceTracker, Router, AgentExecutor
 from .managers import IssueManager, PlanningManager
 from .managers.tech_stack_detector import TechStackDetector
 
+# Import utility helpers
+from .utils.issue_helpers import get_issue_iid
+
 # Import integration components
 from .integrations import MCPIntegration
 
@@ -205,26 +208,26 @@ class Supervisor:
         """
         Implement a single issue with retry logic.
         """
-        issue_id = issue.get("iid")
+        issue_iid = get_issue_iid(issue)
         issue_title = issue.get("title", "Unknown")
         retries = max_retries if max_retries is not None else self.issue_manager.max_retries
 
         # Validate issue structure
         if not self.issue_manager.validate_issue(issue):
-            print(f"[ERROR] Invalid issue structure for #{issue_id}")
+            print(f"[ERROR] Invalid issue structure for #{issue_iid}")
             return False
 
         # CRITICAL: Check if issue is already completed before starting workflow
-        print(f"[CHECK] Verifying completion status for issue #{issue_id}...")
+        print(f"[CHECK] Verifying completion status for issue #{issue_iid}...")
         is_completed = await self.issue_manager.is_issue_completed(issue)
         if is_completed:
-            print(f"[SKIP] Issue #{issue_id} is already closed/merged - skipping implementation")
+            print(f"[SKIP] Issue #{issue_iid} is already closed/merged - skipping implementation")
             self.issue_manager.track_completed_issue(issue)
             return True  # Return success since work is already done
 
         # Create issue tracker for this issue
-        self.current_issue_tracker = IssueTracker(self.run_logger.run_id, issue_id)
-        self.run_logger.add_issue(issue_id)
+        self.current_issue_tracker = IssueTracker(self.run_logger.run_id, issue_iid)
+        self.run_logger.add_issue(issue_iid)
 
         # Pass issue tracker to executor
         self.executor.issue_tracker = self.current_issue_tracker
@@ -232,11 +235,11 @@ class Supervisor:
         # Retry loop
         for attempt in range(retries):
             if attempt > 0:
-                print(f"[RETRY] Issue #{issue_id} attempt {attempt + 1}/{retries}")
+                print(f"[RETRY] Issue #{issue_iid} attempt {attempt + 1}/{retries}")
                 await asyncio.sleep(self.issue_manager.retry_delay * attempt)
 
-            print(f"\n[ISSUE #{issue_id}] Starting: {issue_title}")
-            print(f"[ISSUE #{issue_id}] Implementation starting")
+            print(f"\n[ISSUE #{issue_iid}] Starting: {issue_title}")
+            print(f"[ISSUE #{issue_iid}] Implementation starting")
 
             try:
                 # Create feature branch name for this issue
@@ -244,8 +247,8 @@ class Supervisor:
 
                 # Phase 1: Coding
                 await self._update_pipeline_stage("coding", "running")
-                print(f"[ISSUE #{issue_id}] Phase 1/3: Coding...")
-                print(f"[ISSUE #{issue_id}] Working on branch: {feature_branch}")
+                print(f"[ISSUE #{issue_iid}] Phase 1/3: Coding...")
+                print(f"[ISSUE #{issue_iid}] Working on branch: {feature_branch}")
                 coding_result = await self.route_task(
                     "coding",
                     issue=issue,
@@ -253,7 +256,7 @@ class Supervisor:
                 )
 
                 if not coding_result:
-                    print(f"[ISSUE #{issue_id}] Coding phase failed")
+                    print(f"[ISSUE #{issue_iid}] Coding phase failed")
                     await self._update_pipeline_stage("coding", "failed")
                     continue  # Retry the whole issue
 
@@ -261,8 +264,8 @@ class Supervisor:
 
                 # Phase 2: Testing
                 await self._update_pipeline_stage("testing", "running")
-                print(f"[ISSUE #{issue_id}] Phase 2/3: Testing...")
-                print(f"[ISSUE #{issue_id}] Running tests with minimum {self.min_coverage}% coverage requirement")
+                print(f"[ISSUE #{issue_iid}] Phase 2/3: Testing...")
+                print(f"[ISSUE #{issue_iid}] Running tests with minimum {self.min_coverage}% coverage requirement")
 
                 testing_result = await self.route_task(
                     "testing",
@@ -271,7 +274,7 @@ class Supervisor:
                 )
 
                 if not testing_result:
-                    print(f"[ISSUE #{issue_id}] [WARN] Testing phase failed")
+                    print(f"[ISSUE #{issue_iid}] [WARN] Testing phase failed")
                     await self._update_pipeline_stage("testing", "failed")
                     # Testing agent handles pipeline analysis via MCP tools
 
@@ -279,7 +282,7 @@ class Supervisor:
 
                 # Phase 3: Review & Merge Request
                 await self._update_pipeline_stage("review", "running")
-                print(f"[ISSUE #{issue_id}] Phase 3/3: Review & MR...")
+                print(f"[ISSUE #{issue_iid}] Phase 3/3: Review & MR...")
                 # Review agent checks pipeline status via MCP tools
 
                 review_result = await self.route_task(
@@ -290,7 +293,7 @@ class Supervisor:
 
                 if review_result:
                     await self._update_pipeline_stage("review", "completed")
-                    print(f"[ISSUE #{issue_id}] [OK] Successfully implemented")
+                    print(f"[ISSUE #{issue_iid}] [OK] Successfully implemented")
                     self.issue_manager.track_completed_issue(issue)
 
                     # Finalize issue tracking and export to CSV
@@ -304,7 +307,7 @@ class Supervisor:
                     await self._update_pipeline_stage("review", "failed")
 
             except Exception as e:
-                print(f"[ISSUE #{issue_id}] Implementation failed: {e}")
+                print(f"[ISSUE #{issue_iid}] Implementation failed: {e}")
 
                 # Track error in issue tracker
                 if self.current_issue_tracker:
@@ -390,7 +393,7 @@ class Supervisor:
         # Phase 1.5: Review and Merge Planning Work (if branch exists)
         # Check if planning-structure branch exists and needs merging
         try:
-            branches = await self.mcp_manager.run_tool("list_branches", {
+            branches = await self.mcp.run_tool("list_branches", {
                 "project_id": str(self.project_id)
             })
 
@@ -413,13 +416,28 @@ class Supervisor:
                 # Execute review agent for planning work
                 review_success = await self.route_task(
                     "REVIEW",
-                    {"work_branch": planning_branch, "issue_id": "planning", "type": "planning"}
+                    issue={"iid": "planning", "title": "Planning Structure Merge"},
+                    branch=planning_branch
                 )
 
                 if not review_success:
                     print("[WARNING] Planning review failed, but continuing...")
                 else:
                     print("[REVIEW] Planning work reviewed and merged successfully")
+
+                    # Load ORCH_PLAN.json from master branch after successful merge
+                    print("[PLANNING] Loading implementation order from merged ORCH_PLAN.json...")
+                    plan_loaded = await self.planning_manager.load_plan_from_repository(
+                        self.mcp,
+                        self.project_id,
+                        ref="master"
+                    )
+
+                    if plan_loaded:
+                        print("[PLANNING] ✅ Successfully loaded ORCH_PLAN.json - issues will be implemented in correct order")
+                    else:
+                        print("[PLANNING] ⚠️ Could not load ORCH_PLAN.json - will use fallback prioritization")
+
         except Exception as e:
             print(f"[WARNING] Could not check for planning branch: {str(e)}")
 
@@ -427,6 +445,15 @@ class Supervisor:
         print("\n" + "="*60)
         print("PHASE 2: IMPLEMENTATION PREPARATION")
         print("="*60)
+
+        # Load ORCH_PLAN.json if not already loaded (fallback for resumed sessions)
+        if not self.planning_manager.get_current_plan():
+            print("[PLANNING] Plan not in memory, attempting to load from repository...")
+            await self.planning_manager.load_plan_from_repository(
+                self.mcp,
+                self.project_id,
+                ref="master"
+            )
 
         # Fetch issues from GitLab
         print("[ISSUES] Fetching issues from GitLab...")
@@ -450,9 +477,9 @@ class Supervisor:
             print(f"[ISSUES] After planning prioritization and filtering: {len(issues)} issues to implement")
             # Show issue details in priority order
             for issue in issues[:5]:  # Show first 5
-                issue_id = issue.get('iid') or issue.get('id')
+                issue_iid = get_issue_iid(issue)
                 title = issue.get('title', 'No title')
-                print(f"  - Issue #{issue_id}: {title}")
+                print(f"  - Issue #{issue_iid}: {title}")
         else:
             print("[ISSUES] No issues need implementation (all completed or merged)")
             await self.show_summary()
@@ -482,16 +509,16 @@ class Supervisor:
 
             # Show issue titles for clarity
             for issue in issues_to_implement[:5]:  # Show first 5
-                print(f"  - Issue #{issue.get('iid')}: {issue.get('title', 'Unknown')}")
+                print(f"  - Issue #{get_issue_iid(issue)}: {issue.get('title', 'Unknown')}")
 
             # Implement each issue
             for idx, issue in enumerate(issues_to_implement, 1):
-                issue_id = issue.get('iid')
+                issue_iid = get_issue_iid(issue)
 
                 # Skip if already completed
-                if any((c.get('iid') if isinstance(c, dict) else c) == issue_id
+                if any((get_issue_iid(c) if isinstance(c, dict) else c) == issue_iid
                        for c in self.issue_manager.completed_issues):
-                    print(f"\n[SKIP] Issue #{issue_id} already completed in previous run")
+                    print(f"\n[SKIP] Issue #{issue_iid} already completed in previous run")
                     continue
 
                 print(f"\n[PROGRESS] {idx}/{len(issues_to_implement)}")
@@ -501,7 +528,7 @@ class Supervisor:
 
                 if success:
                     # Already tracked in implement_issue
-                    print(f"[SUCCESS] [OK] Issue #{issue_id} completed successfully")
+                    print(f"[SUCCESS] [OK] Issue #{issue_iid} completed successfully")
                 else:
                     self.issue_manager.track_failed_issue(issue)
 

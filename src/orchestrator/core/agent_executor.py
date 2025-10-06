@@ -53,18 +53,37 @@ class AgentExecutor:
         """
         Check agent success using centralized completion markers.
         Returns (success, confidence) tuple.
+
+        CRITICAL: Pipeline failure detection is agent-aware:
+        - Coding agent: Only fail on COMPILATION_FAILED (ignore test failures)
+        - Testing agent: Fail on TESTS_FAILED or PIPELINE_FAILED
+        - Review agent: Fail on PIPELINE_FAILED or MERGE_BLOCKED
         """
-        # First check for pipeline failures (critical for review agent)
-        if CompletionMarkers.has_pipeline_failure(result):
-            failure_type = CompletionMarkers.get_pipeline_failure_type(result)
-            print(f"[AGENT EXECUTOR] [FAIL] Pipeline failure detected: {failure_type}")
-
-            # Check if this is a network failure that should be retried
-            if CompletionMarkers.should_retry_pipeline(result):
-                print(f"[AGENT EXECUTOR] Network failure - pipeline retry recommended")
-
-            # Pipeline failure means task failed
+        if not result:
             return False, 0.0
+
+        # Agent-specific failure detection
+        if agent_type == "coding":
+            # Coding agent: ONLY fail on compilation errors
+            if "COMPILATION_FAILED" in result:
+                print(f"[AGENT EXECUTOR] [FAIL] Compilation failure detected")
+                return False, 0.0
+
+            # IGNORE any mentions of test failures or general pipeline failures
+            # (Testing agent will handle those)
+
+        elif agent_type in ["testing", "review"]:
+            # Testing/Review agents: fail on pipeline failures
+            if CompletionMarkers.has_pipeline_failure(result):
+                failure_type = CompletionMarkers.get_pipeline_failure_type(result)
+                print(f"[AGENT EXECUTOR] [FAIL] Pipeline failure detected: {failure_type}")
+
+                # Check if this is a network failure that should be retried
+                if CompletionMarkers.should_retry_pipeline(result):
+                    print(f"[AGENT EXECUTOR] Network failure - pipeline retry recommended")
+
+                # Pipeline failure means task failed
+                return False, 0.0
 
         # Check for completion markers
         success, confidence, reason = CompletionMarkers.check_completion(agent_type, result)
@@ -189,7 +208,7 @@ class AgentExecutor:
         """
         Execute coding agent for a specific issue.
         """
-        execution_id = self._start_execution_tracking("coding", {"issue_id": issue.get("iid"), "branch": branch})
+        execution_id = self._start_execution_tracking("coding", {"issue_iid": issue.get("iid"), "branch": branch})
 
         # Track agent start in issue tracker
         if self.issue_tracker:
@@ -236,7 +255,7 @@ class AgentExecutor:
         """
         Execute testing agent for a specific issue.
         """
-        execution_id = self._start_execution_tracking("testing", {"issue_id": issue.get("iid"), "branch": branch})
+        execution_id = self._start_execution_tracking("testing", {"issue_iid": issue.get("iid"), "branch": branch})
 
         # Track agent start in issue tracker
         if self.issue_tracker:
@@ -299,7 +318,7 @@ class AgentExecutor:
         """
         Execute review agent for a specific issue.
         """
-        execution_id = self._start_execution_tracking("review", {"issue_id": issue.get("iid"), "branch": branch})
+        execution_id = self._start_execution_tracking("review", {"issue_iid": issue.get("iid"), "branch": branch})
 
         # Track agent start in issue tracker
         if self.issue_tracker:
@@ -509,9 +528,9 @@ class AgentExecutor:
             self.execution_history.append(execution)
             del self.current_executions[execution_id]
     
-    def _trigger_supervisor_feedback(self, agent_type: str, failure_message: str, issue_id: str, context: dict = None):
+    def _trigger_supervisor_feedback(self, agent_type: str, failure_message: str, issue_iid: str, context: dict = None):
         """Trigger supervisor feedback for agent failures."""
-        print(f"[AGENT EXECUTOR] Triggering supervisor feedback for {agent_type} agent failure on issue #{issue_id}")
+        print(f"[AGENT EXECUTOR] Triggering supervisor feedback for {agent_type} agent failure on issue #{issue_iid}")
         # This would integrate with supervisor's feedback system
         # For now, just log the failure for supervisor to handle
         

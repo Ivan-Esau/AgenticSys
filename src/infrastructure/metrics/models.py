@@ -155,7 +155,7 @@ class DebuggingCycle:
 class AgentMetrics:
     """Metrics for a single agent execution"""
     agent_type: AgentType
-    issue_id: int
+    issue_iid: int
     attempt_number: int
     start_time: datetime
     end_time: Optional[datetime] = None
@@ -177,7 +177,7 @@ class AgentMetrics:
     def to_dict(self) -> Dict[str, Any]:
         return {
             'agent_type': self.agent_type.value,
-            'issue_id': self.issue_id,
+            'issue_iid': self.issue_iid,
             'attempt_number': self.attempt_number,
             'start_time': self.start_time.isoformat(),
             'end_time': self.end_time.isoformat() if self.end_time else None,
@@ -195,7 +195,7 @@ class AgentMetrics:
 @dataclass
 class IssueMetrics:
     """Comprehensive metrics for a single issue"""
-    issue_id: int
+    issue_iid: int
     run_id: str
     start_time: datetime
     end_time: Optional[datetime] = None
@@ -236,7 +236,7 @@ class IssueMetrics:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            'issue_id': self.issue_id,
+            'issue_iid': self.issue_iid,
             'run_id': self.run_id,
             'start_time': self.start_time.isoformat(),
             'end_time': self.end_time.isoformat() if self.end_time else None,

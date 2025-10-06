@@ -17,22 +17,22 @@ class IssueTracker:
     - Error tracking
     """
 
-    def __init__(self, run_id: str, issue_id: int):
+    def __init__(self, run_id: str, issue_iid: int):
         """
         Initialize issue tracker.
 
         Args:
             run_id: Parent run ID
-            issue_id: GitLab issue number
+            issue_iid: GitLab issue IID (project-specific internal ID)
         """
         self.run_id = run_id
-        self.issue_id = issue_id
+        self.issue_iid = issue_iid
         self.start_time = datetime.now()
         self.end_time = None
 
         # Agent-specific metrics
         self.agent_metrics = {
-            'planning': {'attempts': 0, 'successes': 0, 'failures': 0, 'duration': 0},
+            'planning': {'attempts': 0, 'successes': 0, 'failures': 0, 'duration': 0, 'retries': 0},
             'coding': {'attempts': 0, 'successes': 0, 'failures': 0, 'duration': 0, 'retries': 0},
             'testing': {'attempts': 0, 'successes': 0, 'failures': 0, 'duration': 0, 'retries': 0},
             'review': {'attempts': 0, 'successes': 0, 'failures': 0, 'duration': 0, 'retries': 0}
@@ -56,13 +56,13 @@ class IssueTracker:
         self.logs_dir = Path(f'logs/runs/{run_id}/issues')
         self.logs_dir.mkdir(parents=True, exist_ok=True)
 
-        print(f"[ISSUE TRACKER] Started tracking issue #{issue_id} (run: {run_id})")
+        print(f"[ISSUE TRACKER] Started tracking issue #{issue_iid} (run: {run_id})")
 
     def start_agent(self, agent_name: str):
         """Record agent execution start"""
         self.agent_metrics[agent_name]['attempts'] += 1
         self.agent_metrics[agent_name]['start_time'] = datetime.now()
-        print(f"[ISSUE #{self.issue_id}] Agent {agent_name} attempt #{self.agent_metrics[agent_name]['attempts']}")
+        print(f"[ISSUE #{self.issue_iid}] Agent {agent_name} attempt #{self.agent_metrics[agent_name]['attempts']}")
 
     def end_agent(self, agent_name: str, success: bool):
         """Record agent execution end"""
@@ -101,7 +101,7 @@ class IssueTracker:
         elif status == 'failed':
             self.failed_pipelines += 1
 
-        print(f"[ISSUE #{self.issue_id}] Pipeline {pipeline_id}: {status} (total: {len(self.pipeline_attempts)})")
+        print(f"[ISSUE #{self.issue_iid}] Pipeline {pipeline_id}: {status} (total: {len(self.pipeline_attempts)})")
         self._save_metrics()
 
     def start_debugging_cycle(self, agent: str, error_type: str, error_message: str):
@@ -130,14 +130,14 @@ class IssueTracker:
             'timestamp': datetime.now().isoformat()
         })
 
-        print(f"[ISSUE #{self.issue_id}] Debugging cycle started: {agent} fixing {error_type}")
+        print(f"[ISSUE #{self.issue_iid}] Debugging cycle started: {agent} fixing {error_type}")
 
     def record_debug_attempt(self):
         """Record a debugging attempt within current cycle"""
         if self.current_cycle:
             self.current_cycle['attempts'] += 1
             self.agent_metrics[self.current_cycle['agent']]['retries'] += 1
-            print(f"[ISSUE #{self.issue_id}] Debug attempt #{self.current_cycle['attempts']}")
+            print(f"[ISSUE #{self.issue_iid}] Debug attempt #{self.current_cycle['attempts']}")
 
     def end_debugging_cycle(self, resolved: bool):
         """
@@ -159,7 +159,7 @@ class IssueTracker:
             self.debugging_cycles.append(self.current_cycle)
 
             status = "RESOLVED" if resolved else "FAILED"
-            print(f"[ISSUE #{self.issue_id}] Debugging cycle {status} after {self.current_cycle['attempts']} attempts")
+            print(f"[ISSUE #{self.issue_iid}] Debugging cycle {status} after {self.current_cycle['attempts']} attempts")
 
             self.current_cycle = None
             self._save_metrics()
@@ -185,7 +185,7 @@ class IssueTracker:
 
         final_report = {
             'run_id': self.run_id,
-            'issue_id': self.issue_id,
+            'issue_iid': self.issue_iid,
             'status': status,
             'start_time': self.start_time.isoformat(),
             'end_time': self.end_time.isoformat(),
@@ -214,11 +214,11 @@ class IssueTracker:
         }
 
         # Write final report
-        report_file = self.logs_dir / f"issue_{self.issue_id}_report.json"
+        report_file = self.logs_dir / f"issue_{self.issue_iid}_report.json"
         with open(report_file, 'w') as f:
             json.dump(final_report, f, indent=2)
 
-        print(f"[ISSUE #{self.issue_id}] Final report written:")
+        print(f"[ISSUE #{self.issue_iid}] Final report written:")
         print(f"  - Status: {status}")
         print(f"  - Duration: {duration:.2f}s")
         print(f"  - Pipelines: {total_pipeline_attempts} ({self.succeeded_pipelines} success, {self.failed_pipelines} failed)")
@@ -232,7 +232,7 @@ class IssueTracker:
         """Save current metrics to file (incremental updates)"""
         current_data = {
             'run_id': self.run_id,
-            'issue_id': self.issue_id,
+            'issue_iid': self.issue_iid,
             'start_time': self.start_time.isoformat(),
             'agent_metrics': self.agent_metrics,
             'pipeline_attempts': len(self.pipeline_attempts),
@@ -243,6 +243,6 @@ class IssueTracker:
             'status': 'in_progress'
         }
 
-        metrics_file = self.logs_dir / f"issue_{self.issue_id}_metrics.json"
+        metrics_file = self.logs_dir / f"issue_{self.issue_iid}_metrics.json"
         with open(metrics_file, 'w') as f:
             json.dump(current_data, f, indent=2)

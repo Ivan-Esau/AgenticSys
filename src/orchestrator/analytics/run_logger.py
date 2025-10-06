@@ -73,9 +73,9 @@ class RunLogger:
         print(f"[RUN LOGGER] Created run: {self.run_id}")
         print(f"[RUN LOGGER] LLM: {self.llm_config['provider']}/{self.llm_config['model']} (temp={self.llm_config['temperature']})")
 
-    def add_issue(self, issue_id: int):
+    def add_issue(self, issue_iid: int):
         """Track that an issue is being processed"""
-        self.issues_processed.append(issue_id)
+        self.issues_processed.append(issue_iid)
         self._update_metadata()
 
     def record_error(self):

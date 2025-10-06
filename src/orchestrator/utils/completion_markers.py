@@ -62,7 +62,7 @@ class CompletionMarkers:
     # Error signals to detect failures
     ERROR_SIGNALS = {
         "planning": ["PLANNING_FAILED", "planning failed"],
-        "coding": ["CODING_FAILED", "CODING_RETRYING"],
+        "coding": ["CODING_FAILED", "CODING_RETRYING", "COMPILATION_FAILED"],
         "testing": ["TESTS_FAILED", "TESTS_DEBUGGING", "TESTING_FAILED"],
         "review": ["PIPELINE_FAILED", "REVIEW_FAILED", "MERGE_BLOCKED", "PIPELINE_BLOCKED"]
     }
@@ -135,13 +135,13 @@ class CompletionMarkers:
         return cls.SIGNALS.get(agent_type, "UNKNOWN_COMPLETION")
 
     @classmethod
-    def format_completion_message(cls, agent_type: str, issue_id: str = None, **kwargs) -> str:
+    def format_completion_message(cls, agent_type: str, issue_iid: str = None, **kwargs) -> str:
         """
         Format a proper completion message for an agent.
 
         Args:
             agent_type: Type of agent
-            issue_id: Issue ID if available
+            issue_iid: Issue IID if available
             **kwargs: Additional context (e.g., pipeline_url)
 
         Returns:
@@ -154,16 +154,16 @@ class CompletionMarkers:
             return f"{base_signal}: Planning analysis complete. CI/CD foundation established with working {tech_stack} pipeline. Ready for implementation."
 
         elif agent_type == "coding":
-            issue_part = f"Issue #{issue_id} " if issue_id else ""
+            issue_part = f"Issue #{issue_iid} " if issue_iid else ""
             return f"{base_signal}: {issue_part}implementation finished. Production code ready for Testing Agent."
 
         elif agent_type == "testing":
-            issue_part = f"Issue #{issue_id} " if issue_id else ""
+            issue_part = f"Issue #{issue_iid} " if issue_iid else ""
             pipeline_url = kwargs.get('pipeline_url', 'N/A')
             return f"{base_signal}: {issue_part}tests finished. Pipeline success confirmed at {pipeline_url}. All tests passing for handoff to Review Agent."
 
         elif agent_type == "review":
-            issue_part = f"Issue #{issue_id} " if issue_id else ""
+            issue_part = f"Issue #{issue_iid} " if issue_iid else ""
             return f"{base_signal}: {issue_part}merged and closed successfully. Ready for next issue."
 
         return f"{base_signal}: Task completed successfully."
@@ -218,6 +218,30 @@ class CompletionMarkers:
         ]
         output_lower = output.lower()
         return any(indicator.lower() in output_lower for indicator in network_indicators)
+
+    @classmethod
+    def has_agent_specific_failure(cls, agent_type: str, output: str) -> bool:
+        """
+        Check for agent-specific failures based on agent type.
+
+        - Coding agent: Only compilation failures count
+        - Testing agent: Test and pipeline failures count
+        - Review agent: Pipeline and merge failures count
+
+        Args:
+            agent_type: Type of agent (coding, testing, review)
+            output: Agent output to check
+
+        Returns:
+            True if agent-specific failure detected
+        """
+        if not output:
+            return False
+
+        output_lower = output.lower()
+        error_signals = cls.ERROR_SIGNALS.get(agent_type, [])
+
+        return any(signal.lower() in output_lower for signal in error_signals)
 
     @classmethod
     def extract_issue_number(cls, output: str) -> str:

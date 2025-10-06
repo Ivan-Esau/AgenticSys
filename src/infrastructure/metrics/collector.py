@@ -116,45 +116,45 @@ class MetricsCollector:
 
     # ==================== Issue-Level Methods ====================
 
-    def start_issue(self, issue_id: int) -> IssueMetrics:
+    def start_issue(self, issue_iid: int) -> IssueMetrics:
         """
         Start tracking a new issue.
 
         Args:
-            issue_id: GitLab issue ID
+            issue_iid: GitLab issue IID (project-specific internal ID)
 
         Returns:
             New issue metrics object
         """
         issue_metrics = IssueMetrics(
-            issue_id=issue_id,
+            issue_iid=issue_iid,
             run_id=self.run_metrics.run_id,
             start_time=datetime.now(),
             status=Status.IN_PROGRESS
         )
 
-        self.run_metrics.issues[issue_id] = issue_metrics
-        self._active_issue = issue_id
+        self.run_metrics.issues[issue_iid] = issue_metrics
+        self._active_issue = issue_iid
 
         return issue_metrics
 
-    def finalize_issue(self, issue_id: int, status: Status,
+    def finalize_issue(self, issue_iid: int, status: Status,
                        code_metrics: Optional[CodeMetrics] = None) -> IssueMetrics:
         """
         Finalize an issue and calculate statistics.
 
         Args:
-            issue_id: Issue ID to finalize
+            issue_iid: Issue IID (project-specific internal ID) to finalize
             status: Final status
             code_metrics: Optional code change metrics
 
         Returns:
             Finalized issue metrics
         """
-        if issue_id not in self.run_metrics.issues:
-            raise ValueError(f"Issue {issue_id} not found in metrics")
+        if issue_iid not in self.run_metrics.issues:
+            raise ValueError(f"Issue {issue_iid} not found in metrics")
 
-        issue = self.run_metrics.issues[issue_id]
+        issue = self.run_metrics.issues[issue_iid]
         issue.end_time = datetime.now()
         issue.duration_seconds = (issue.end_time - issue.start_time).total_seconds()
         issue.status = status
@@ -208,37 +208,37 @@ class MetricsCollector:
         self._active_issue = None
         return issue
 
-    def get_issue_metrics(self, issue_id: int) -> Optional[IssueMetrics]:
+    def get_issue_metrics(self, issue_iid: int) -> Optional[IssueMetrics]:
         """Get metrics for a specific issue"""
-        return self.run_metrics.issues.get(issue_id)
+        return self.run_metrics.issues.get(issue_iid)
 
     # ==================== Agent-Level Methods ====================
 
-    def start_agent(self, agent_type: AgentType, issue_id: int,
+    def start_agent(self, agent_type: AgentType, issue_iid: int,
                     attempt_number: int = 1) -> AgentMetrics:
         """
         Start tracking an agent execution.
 
         Args:
             agent_type: Type of agent
-            issue_id: Issue being worked on
+            issue_iid: Issue IID (project-specific internal ID) being worked on
             attempt_number: Attempt number (for retries)
 
         Returns:
             New agent metrics object
         """
-        if issue_id not in self.run_metrics.issues:
-            raise ValueError(f"Issue {issue_id} not started")
+        if issue_iid not in self.run_metrics.issues:
+            raise ValueError(f"Issue {issue_iid} not started")
 
         agent_metrics = AgentMetrics(
             agent_type=agent_type,
-            issue_id=issue_id,
+            issue_iid=issue_iid,
             attempt_number=attempt_number,
             start_time=datetime.now(),
             status=Status.IN_PROGRESS
         )
 
-        self.run_metrics.issues[issue_id].agent_executions.append(agent_metrics)
+        self.run_metrics.issues[issue_iid].agent_executions.append(agent_metrics)
         self._active_agent = agent_metrics
 
         return agent_metrics

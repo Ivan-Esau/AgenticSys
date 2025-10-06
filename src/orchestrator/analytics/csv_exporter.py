@@ -50,7 +50,7 @@ class CSVExporter:
             with open(issues_file, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow([
-                    'run_id', 'issue_id', 'start_time', 'end_time', 'duration_seconds',
+                    'run_id', 'issue_iid', 'start_time', 'end_time', 'duration_seconds',
                     'status', 'complexity_score',
                     'total_errors', 'total_pipeline_attempts', 'succeeded_pipelines', 'failed_pipelines',
                     'pipeline_success_rate', 'debugging_cycles', 'resolved_cycles',
@@ -67,7 +67,7 @@ class CSVExporter:
             with open(agents_file, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow([
-                    'run_id', 'issue_id', 'agent_name', 'attempt_number',
+                    'run_id', 'issue_iid', 'agent_name', 'attempt_number',
                     'start_time', 'end_time', 'duration_seconds',
                     'success', 'retries', 'tool_calls', 'tokens_used',
                     'error_message'
@@ -79,7 +79,7 @@ class CSVExporter:
             with open(pipelines_file, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow([
-                    'run_id', 'issue_id', 'pipeline_id', 'commit_sha',
+                    'run_id', 'issue_iid', 'pipeline_id', 'commit_sha',
                     'triggered_by', 'retry_attempt',
                     'start_time', 'end_time', 'duration_seconds',
                     'status', 'failed_jobs', 'error_type',
@@ -92,7 +92,7 @@ class CSVExporter:
             with open(debugging_file, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow([
-                    'run_id', 'issue_id', 'agent', 'error_type', 'error_message',
+                    'run_id', 'issue_iid', 'agent', 'error_type', 'error_message',
                     'start_time', 'end_time', 'duration_seconds',
                     'attempts', 'resolved', 'resolution_method'
                 ])
@@ -103,7 +103,7 @@ class CSVExporter:
             with open(errors_file, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow([
-                    'run_id', 'issue_id', 'agent', 'error_type', 'error_message',
+                    'run_id', 'issue_iid', 'agent', 'error_type', 'error_message',
                     'timestamp', 'severity', 'resolved'
                 ])
 
@@ -113,7 +113,7 @@ class CSVExporter:
             with open(tools_file, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow([
-                    'run_id', 'issue_id', 'agent', 'tool_name',
+                    'run_id', 'issue_iid', 'agent', 'tool_name',
                     'call_count', 'success_count', 'failure_count',
                     'avg_duration_ms', 'total_duration_ms'
                 ])
@@ -160,7 +160,7 @@ class CSVExporter:
             writer = csv.writer(f)
             writer.writerow([
                 run_id,
-                issue_data.get('issue_id'),
+                issue_data.get('issue_iid'),
                 issue_data.get('start_time'),
                 issue_data.get('end_time'),
                 issue_data.get('duration_seconds', 0),
@@ -189,13 +189,13 @@ class CSVExporter:
                 issue_data.get('code_metrics', {}).get('test_coverage', 0.0)
             ])
 
-    def export_agent_execution(self, run_id: str, issue_id: int, agent_data: Dict[str, Any]):
+    def export_agent_execution(self, run_id: str, issue_iid: int, agent_data: Dict[str, Any]):
         """
         Export agent execution data to agents.csv
 
         Args:
             run_id: Parent run ID
-            issue_id: Issue number
+            issue_iid: Issue IID (project-specific internal ID)
             agent_data: Dictionary containing agent metrics
         """
         agents_file = self.csv_dir / 'agents.csv'
@@ -203,7 +203,7 @@ class CSVExporter:
             writer = csv.writer(f)
             writer.writerow([
                 run_id,
-                issue_id,
+                issue_iid,
                 agent_data.get('agent_name'),
                 agent_data.get('attempt_number', 1),
                 agent_data.get('start_time'),
@@ -216,13 +216,13 @@ class CSVExporter:
                 agent_data.get('error_message', '')
             ])
 
-    def export_pipeline(self, run_id: str, issue_id: int, pipeline_data: Dict[str, Any]):
+    def export_pipeline(self, run_id: str, issue_iid: int, pipeline_data: Dict[str, Any]):
         """
         Export pipeline data to pipelines.csv
 
         Args:
             run_id: Parent run ID
-            issue_id: Issue number
+            issue_iid: Issue IID (project-specific internal ID)
             pipeline_data: Dictionary containing pipeline metrics
         """
         pipelines_file = self.csv_dir / 'pipelines.csv'
@@ -230,7 +230,7 @@ class CSVExporter:
             writer = csv.writer(f)
             writer.writerow([
                 run_id,
-                issue_id,
+                issue_iid,
                 pipeline_data.get('pipeline_id'),
                 pipeline_data.get('commit_sha', ''),
                 pipeline_data.get('triggered_by', ''),
@@ -245,13 +245,13 @@ class CSVExporter:
                 pipeline_data.get('execution_time', 0)
             ])
 
-    def export_debugging_cycle(self, run_id: str, issue_id: int, cycle_data: Dict[str, Any]):
+    def export_debugging_cycle(self, run_id: str, issue_iid: int, cycle_data: Dict[str, Any]):
         """
         Export debugging cycle data to debugging_cycles.csv
 
         Args:
             run_id: Parent run ID
-            issue_id: Issue number
+            issue_iid: Issue IID (project-specific internal ID)
             cycle_data: Dictionary containing cycle metrics
         """
         debugging_file = self.csv_dir / 'debugging_cycles.csv'
@@ -259,7 +259,7 @@ class CSVExporter:
             writer = csv.writer(f)
             writer.writerow([
                 run_id,
-                issue_id,
+                issue_iid,
                 cycle_data.get('agent'),
                 cycle_data.get('error_type'),
                 cycle_data.get('error_message', ''),
@@ -271,13 +271,13 @@ class CSVExporter:
                 cycle_data.get('resolution_method', '')
             ])
 
-    def export_error(self, run_id: str, issue_id: int, error_data: Dict[str, Any]):
+    def export_error(self, run_id: str, issue_iid: int, error_data: Dict[str, Any]):
         """
         Export error data to errors.csv
 
         Args:
             run_id: Parent run ID
-            issue_id: Issue number
+            issue_iid: Issue IID (project-specific internal ID)
             error_data: Dictionary containing error info
         """
         errors_file = self.csv_dir / 'errors.csv'
@@ -285,7 +285,7 @@ class CSVExporter:
             writer = csv.writer(f)
             writer.writerow([
                 run_id,
-                issue_id,
+                issue_iid,
                 error_data.get('agent', ''),
                 error_data.get('type', ''),
                 error_data.get('message', ''),
@@ -294,13 +294,13 @@ class CSVExporter:
                 error_data.get('resolved', False)
             ])
 
-    def export_tool_usage(self, run_id: str, issue_id: int, tool_stats: Dict[str, Any]):
+    def export_tool_usage(self, run_id: str, issue_iid: int, tool_stats: Dict[str, Any]):
         """
         Export tool usage statistics to tool_usage.csv
 
         Args:
             run_id: Parent run ID
-            issue_id: Issue number
+            issue_iid: Issue IID (project-specific internal ID)
             tool_stats: Dictionary containing tool usage metrics
         """
         tools_file = self.csv_dir / 'tool_usage.csv'
@@ -312,7 +312,7 @@ class CSVExporter:
             for tool_name, stats in tool_stats.get('tools', {}).items():
                 writer.writerow([
                     run_id,
-                    issue_id,
+                    issue_iid,
                     agent,
                     tool_name,
                     stats.get('call_count', 0),

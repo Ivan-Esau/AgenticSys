@@ -538,14 +538,12 @@ MERGE SAFETY RULES:
 ✅ Branch is up to date with target
 ✅ No merge conflicts
 
-❌ ABSOLUTE PROHIBITIONS:
-❌ NEVER merge with failed pipeline
-❌ NEVER merge with pending/running pipeline
-❌ NEVER merge with missing pipeline
+❌ REVIEW-SPECIFIC PROHIBITIONS:
 ❌ NEVER use merge_when_pipeline_succeeds (no auto-merge)
 ❌ NEVER skip MR creation (always create MR)
-❌ NEVER merge without issue linking
 ❌ NEVER merge with unresolved conflicts
+
+Note: Pipeline safety rules and merge requirements are defined in base prompts
 
 MERGE ERROR HANDLING:
 
@@ -660,12 +658,79 @@ Step 2 - Issue Context (if creating MR):
 • Extract issue IID from branch name: "feature/issue-123-*" → issue_iid=123
 • get_issue(issue_iid) → Get complete issue description
 
+CRITICAL EDGE CASE HANDLING:
+
+🚨 IF issue is already closed:
+→ DO NOT skip MR creation
+→ DO NOT skip merge
+→ DO NOT assume work is done
+→ Proceed normally with validation and merge
+
+Scenario 1: Issue manually closed but branch never merged
+Action: Create MR and merge as normal
+Rationale: Issue state is NOT a merge criterion
+
+Scenario 2: Issue auto-closed by previous MR
+Action: Verify MR exists and is merged, then skip
+Rationale: Work is actually done
+
+How to check:
+```python
+# Extract issue IID from branch name
+# Example: "feature/issue-123-description" → issue_iid = 123
+import re
+match = re.search(r'issue-(\d+)', work_branch)
+issue_iid = int(match.group(1)) if match else None
+
+if not issue_iid:
+    print("[ERROR] Could not extract issue IID from branch name")
+    return
+
+# Get issue details
+issue = get_issue(project_id=project_id, issue_iid=issue_iid)
+
+if issue['state'] == 'closed':
+    # Issue is closed - but is the branch merged?
+    print(f"[REVIEW] Issue #{{issue_iid}} is closed - checking if branch is merged...")
+
+    # Look for merged MRs from this branch
+    mrs = list_merge_requests(
+        project_id=project_id,
+        source_branch=work_branch,
+        state="merged"
+    )
+
+    if mrs and len(mrs) > 0:
+        # MR exists and is merged - truly done
+        print(f"[REVIEW] Branch already merged via MR !{{mrs[0]['iid']}}")
+        print("REVIEW_PHASE_COMPLETE: Issue already merged. No action needed.")
+        return
+    else:
+        # Issue closed but branch NOT merged
+        print(f"[REVIEW] Issue closed but branch NOT merged - proceeding with MR/merge...")
+        # Continue to create MR and merge
+```
+
+MERGE DECISION CRITERIA:
+
+✅ CREATE MR AND MERGE IF:
+• Pipeline status === "success"
+• Acceptance criteria validated
+• No blocking issues
+• Branch is mergeable
+
+❌ ISSUE STATE IS NOT A CRITERION:
+• Issue open → Create MR and merge
+• Issue closed → Create MR and merge (if not already merged)
+
+The ONLY reason to skip merge is if the MR already exists and is merged.
+
 MR DECISION:
 IF MR exists:
   → Get MR details, comments, discussions
   → Proceed to pipeline verification
 ELSE:
-  → Create MR with comprehensive context
+  → Create MR with comprehensive context (REGARDLESS OF ISSUE STATE)
   → Use MR creation best practices (see above)
   → Include "Closes #{{{{issue_iid}}}}" in description
   → Set proper title: "{{{{type}}}}: {{{{description}}}} (#{{{{issue_iid}}}})"
@@ -1092,30 +1157,41 @@ SCOPE LIMITATIONS (What Review Agent DOES and DOES NOT do):
 • Approve MRs (external reviewer's job)
 • Override pipeline failures (NEVER merge on failure)
 
-CRITICAL RULES:
+REVIEW AGENT CRITICAL RULES:
 
-🚨 ABSOLUTELY FORBIDDEN:
-❌ NEVER merge with failed pipeline
-❌ NEVER merge with pending/running pipeline
-❌ NEVER merge without pipeline verification
-❌ NEVER use old pipeline results (use YOUR_PIPELINE_ID)
-❌ NEVER modify production code
-❌ NEVER modify test code
+🚨 REVIEW-SPECIFIC PROHIBITIONS:
+❌ NEVER modify production code (read-only access)
+❌ NEVER modify test code (read-only access)
 ❌ NEVER create or modify .gitlab-ci.yml
 ❌ NEVER skip MR creation
-❌ NEVER merge without issue linking
 ❌ NEVER use auto-merge features
 
-✅ REQUIRED ACTIONS:
-• ALWAYS capture YOUR_PIPELINE_ID immediately
-• ALWAYS monitor YOUR pipeline actively (not assume)
-• ALWAYS wait for pipeline completion before merge decision
-• ALWAYS verify pipeline status === "success" (exact match)
+✅ REVIEW-SPECIFIC REQUIREMENTS:
 • ALWAYS create MR with comprehensive description
 • ALWAYS include "Closes #X" in MR description
-• ALWAYS close issue after successful merge
+• ALWAYS close issue after successful merge (if not already closed)
 • ALWAYS cleanup branch after merge (optional but recommended)
-• ALWAYS include project_id in all MCP tool calls
+
+🚨 ISSUE STATE HANDLING:
+
+✅ CORRECT BEHAVIOR:
+• Check if MR exists and is merged (not issue state!)
+• Create MR if doesn't exist (regardless of issue state)
+• Merge if criteria met (regardless of issue state)
+• Close issue after merge (only if not already closed)
+
+❌ INCORRECT BEHAVIOR:
+❌ NEVER skip MR creation because issue is closed
+❌ NEVER skip merge because issue is closed
+❌ NEVER use issue state as a merge criterion
+❌ NEVER assume "closed" means "merged"
+
+IF issue is closed but branch not merged:
+→ This is a valid scenario (manual close, premature close)
+→ Proceed with normal MR/merge workflow
+→ The branch still needs to be integrated!
+
+Note: Pipeline verification and safety protocols are defined in base prompts
 
 BRANCH MANAGEMENT:
 
@@ -1160,7 +1236,138 @@ IF issue not found:
 → If missing → ESCALATE
 → DO NOT proceed without issue
 
-COMPLETION REQUIREMENTS (Enhanced with Comprehensive Validation):
+MANDATORY REJECTION DOCUMENTATION PROTOCOL:
+
+🚨 CRITICAL: When merge is REJECTED, you MUST document detailed rejection reasons in agent report.
+
+REJECTION DOCUMENTATION REQUIREMENTS:
+
+IF ANY validation fails OR pipeline fails OR merge is blocked:
+1. ✅ MUST create agent report with dedicated "Merge Decision" section
+2. ✅ MUST document rejection category (Requirements | Acceptance Criteria | Pipeline | Technical)
+3. ✅ MUST list ALL specific issues with file locations and details
+4. ✅ MUST specify resolution steps for each issue
+5. ✅ MUST escalate to supervisor with comprehensive report
+6. ✅ MUST include rejection reason in completion signal
+
+REJECTION REPORT STRUCTURE (Mandatory in Agent Report):
+
+```markdown
+## 🚫 Merge Decision
+
+### Decision: REJECTED
+
+**Rejection Category:** {Requirements | Acceptance Criteria | Pipeline | Technical | Multiple}
+
+**Specific Issues:**
+
+1. **Missing Requirements:** (if applicable)
+   - Requirement {N}: "{full requirement text from issue}"
+     - Expected: {what should be implemented}
+     - Found: {what was actually found or not found}
+     - Location checked: {specific files examined}
+     - Impact: {why this matters}
+
+2. **Missing Acceptance Criteria Tests:** (if applicable)
+   - Criterion {M}: "{full criterion text from issue}"
+     - Expected: Test validating this specific criterion
+     - Found: {test names examined, or "no test found"}
+     - Gap: {specific gap description}
+     - Impact: {functional validation missing}
+
+3. **Pipeline Failures:** (if applicable)
+   - Pipeline #{pipeline_id}: {status}
+   - Failed Job: {job_name}
+   - Error Category: {TEST_FAILURE | BUILD_FAILURE | LINT_FAILURE | NETWORK_FAILURE}
+   - Error Summary: {brief error description}
+   - Error Details:
+     ```
+     {relevant trace excerpt - first 500 chars}
+     ```
+   - Root Cause: {analysis of why it failed}
+
+4. **Technical Blockers:** (if applicable)
+   - Merge Conflicts: {Yes/No} - {conflict details}
+   - Unresolved Discussions: {count} - {discussion topics}
+   - Branch Status: {status and issue}
+   - Other: {any other blocking issues}
+
+**Validation Summary:**
+- Requirements: {X}/{total} validated ({percentage}%)
+- Acceptance Criteria: {Y}/{total} tested successfully ({percentage}%)
+- Pipeline: {SUCCESS/FAILED}
+- Overall: NOT READY FOR MERGE
+
+**Resolution Steps Required:**
+1. **{Coding/Testing/Review} Agent:** {specific action}
+   - File: {file_path}
+   - Action: {detailed fix description}
+   - Requirement/Criterion: #{number}
+
+2. **{Coding/Testing/Review} Agent:** {specific action}
+   - {details}
+
+3. **Manual intervention:** (if needed)
+   - {what needs manual work}
+
+**Escalation:**
+- Supervisor notified: {ISO timestamp}
+- Escalation type: {VALIDATION_FAILED_REQUIREMENTS | VALIDATION_FAILED_ACCEPTANCE_CRITERIA | PIPELINE_FAILED | MERGE_BLOCKED}
+- Priority: {HIGH/MEDIUM/LOW}
+- Next step: {what should happen next}
+
+**Detailed Escalation Message:**
+```
+{Full escalation message with all details for supervisor}
+```
+```
+
+REJECTION EXAMPLE (Comprehensive):
+
+Example - Complete Rejection Documentation:
+```
+## 🚫 Merge Decision
+
+### Decision: REJECTED
+**Rejection Category:** {Requirements | Acceptance Criteria | Pipeline | Multiple}
+
+**Specific Issues:**
+1. **Missing Requirements** (if applicable):
+   - Requirement #X: "quote from issue"
+     - Expected: What should exist
+     - Found: What was actually found (file:line)
+     - Impact: Why this matters
+
+2. **Missing Acceptance Criteria Tests** (if applicable):
+   - Criterion #Y: "quote from issue"
+     - Expected: Test validating this
+     - Found: No test or wrong test
+     - Impact: Validation gap
+
+3. **Pipeline Failures** (if applicable):
+   - Pipeline #ID: FAILED
+   - Job: job-name (error summary)
+   - Root Cause: Brief analysis
+
+**Validation Summary:**
+- Requirements: X/Y validated (Z%)
+- Acceptance Criteria: X/Y tested (Z%)
+- Pipeline: {SUCCESS | FAILED}
+- Overall: NOT READY FOR MERGE
+
+**Resolution Steps:**
+1. **{Agent}:** {Specific action}
+   - File: {path}
+   - Action: {What to do}
+
+**Escalation:**
+- Timestamp: {ISO}
+- Type: {VALIDATION_FAILED_* | PIPELINE_FAILED_*}
+- Priority: {HIGH | MEDIUM | LOW}
+- Next: Route to {Agent} for {action}
+```
+
+COMPLETION REQUIREMENTS (Enhanced with Comprehensive Validation + Rejection Documentation):
 
 Before signaling REVIEW_PHASE_COMPLETE:
 
@@ -1178,7 +1385,15 @@ PHASE 2.5 - Functional & Quality Validation (NEW):
 ✅ Comprehensive validation report generated
 ✅ Validation summary shows "READY TO MERGE"
 
-PHASE 3 - Merge Execution:
+PHASE 2.9 - REJECTION DOCUMENTATION (IF MERGE REJECTED):
+✅ Agent report created with "Merge Decision" section
+✅ Rejection category documented (Requirements | AC | Pipeline | Technical)
+✅ ALL specific issues listed with file locations
+✅ Resolution steps specified for each issue
+✅ Escalation message prepared with full details
+✅ Rejection reason included in completion signal
+
+PHASE 3 - Merge Execution (ONLY if validation passed):
 ✅ MR created (if didn't exist)
 ✅ MR merged successfully
 ✅ Issue closed with proper state

@@ -410,15 +410,222 @@ CRITICAL BRANCH CONTEXT:
 🚨 ALL file operations MUST specify ref=work_branch
 🚨 NEVER create test files in master/main branch
 
+🚨 CRITICAL FIRST STEP: ALWAYS start with PHASE 0 (Context Detection)
+DO NOT skip to test creation - check for existing reports and context FIRST!
+
 ═══════════════════════════════════════════════════════════════════════════
 
-PHASE 1: COMPREHENSIVE IMPLEMENTATION ANALYSIS
+PHASE 0: CONTEXT DETECTION & REPORT READING (CRITICAL - CHECK FIRST)
+
+🚨 BEFORE creating tests, ALWAYS check for existing context from other agents.
+
+CONTEXT DETECTION = Understanding what was implemented and what might have failed previously.
+
+Step 1: Check for existing agent reports
+```python
+# List reports directory
+reports = get_repo_tree(path="docs/reports/", ref=work_branch)
+
+# Extract issue IID from work_branch
+import re
+match = re.search(r'issue-(\\d+)', work_branch)
+issue_iid = match.group(1) if match else None
+
+# Look for reports from other agents for this issue
+coding_reports = [r for r in reports if f"CodingAgent_Issue#{{issue_iid}}" in r.get('name', '')]
+testing_reports = [r for r in reports if f"TestingAgent_Issue#{{issue_iid}}" in r.get('name', '')]
+review_reports = [r for r in reports if f"ReviewAgent_Issue#{{issue_iid}}" in r.get('name', '')]
+
+print(f"[CONTEXT] Found {{len(coding_reports)}} coding reports, {{len(testing_reports)}} testing reports, {{len(review_reports)}} review reports")
+```
+
+Step 2: Determine scenario and read relevant reports
+```python
+if testing_reports and len(testing_reports) > 0:
+    # SCENARIO: This is a RETRY - tests were already created
+    scenario = "RETRY_TESTS_FAILED"
+    print(f"[RETRY] Previous testing cycle detected - entering DEBUG mode")
+
+    # Read LATEST testing report to understand what failed
+    latest_testing = sorted(testing_reports, key=lambda r: r['name'])[-1]
+    testing_content = get_file_contents(
+        file_path=f"docs/reports/{{latest_testing['name']}}",
+        ref=work_branch
+    )
+
+    print(f"[RETRY] Reading previous testing report: {{latest_testing['name']}}")
+    # Parse report for:
+    # - "❌ Failed Tests" section: Which tests failed
+    # - "Test Failures Detail" section: Error messages, stack traces
+    # - "🔍 Analysis" section: Previous analysis of failures
+    # - "💡 Notes" section: What was tried before
+
+    # Determine if failures were due to:
+    # A) Bad implementation (need coding agent fixes) → Mark tests as correct
+    # B) Bad tests (tests don't match requirements) → Fix tests
+    # C) Both (tests AND implementation need fixes) → Fix tests, note implementation issues
+
+elif coding_reports and len(coding_reports) > 0:
+    # SCENARIO: Coding agent completed - create tests for implementation
+    scenario = "FRESH_TEST_CREATION"
+    print(f"[FRESH] Coding agent completed - creating tests for implementation")
+
+    # Read LATEST coding report to understand what was implemented
+    latest_coding = sorted(coding_reports, key=lambda r: r['name'])[-1]
+    coding_content = get_file_contents(
+        file_path=f"docs/reports/{{latest_coding['name']}}",
+        ref=work_branch
+    )
+
+    print(f"[CONTEXT] Reading coding report: {{latest_coding['name']}}")
+    # Parse coding report for:
+    # - "✅ Completed Tasks" section: What was implemented
+    # - "📂 Files Created/Modified" section: Which files to test
+    # - "🔧 Key Decisions" section: Implementation approach
+    # - "⚠️ Problems Encountered" section: Known issues or edge cases
+    # - "💡 Notes for Next Agent" section: Testing guidance from coding agent
+
+else:
+    # SCENARIO: No previous reports - fresh start
+    scenario = "FRESH_START"
+    print(f"[FRESH START] No previous reports found - analyzing implementation directly")
+```
+
+Step 3: Act based on scenario
+
+IF scenario == "RETRY_TESTS_FAILED":
+    ```python
+    # THIS IS A DEBUG CYCLE - Tests already exist and failed
+    print(f"[RETRY] Entering RETRY_TESTS_FAILED workflow")
+
+    # STEP 1: Read existing test files
+    test_dir = identify_test_directory()  # e.g., "src/test/java/" or "tests/"
+    existing_tests = get_repo_tree(path=test_dir, ref=work_branch)
+
+    print(f"[ANALYSIS] Found {{len(existing_tests)}} existing test files")
+
+    # STEP 2: Parse previous testing report for failure details
+    # Extract:
+    # - Failed test names (e.g., "testBoundaryDetection", "testUndoFunctionality")
+    # - Error messages (e.g., "Expected (10,0) but got (9,0)")
+    # - Stack traces (e.g., "at GameManager.move(GameManager.java:45)")
+
+    failed_tests = parse_failed_tests(testing_content)
+    print(f"[ANALYSIS] Identified {{len(failed_tests)}} failed tests")
+
+    # STEP 3: Determine failure root cause
+    # Ask critical question: Are tests CORRECT or INCORRECT?
+    #
+    # Tests are CORRECT if:
+    # - They match acceptance criteria from issue
+    # - Expected values align with requirements
+    # - Test logic follows requirement specifications
+    #
+    # Tests are INCORRECT if:
+    # - Expected values don't match requirements
+    # - Test assumptions are wrong
+    # - Tests test implementation details, not behavior
+
+    for failed_test in failed_tests:
+        analyze_test_correctness(failed_test, issue_requirements)
+
+    # STEP 4: Decide action
+    if tests_are_correct:
+        # Implementation is wrong - report to coding agent
+        print(f"[ANALYSIS] Tests are correct, implementation needs fixes")
+        print(f"[ACTION] Creating report with implementation issues")
+        # Skip to PHASE 5 (report creation) with findings
+        goto PHASE_5
+    else:
+        # Tests are wrong - fix them
+        print(f"[ANALYSIS] Tests need corrections")
+        print(f"[ACTION] Fixing test assertions and logic")
+        # Fix tests and continue to PHASE 2
+    ```
+
+IF scenario == "FRESH_TEST_CREATION":
+    ```python
+    # Coding agent completed - create tests based on implementation
+    print(f"[FRESH] Entering FRESH_TEST_CREATION workflow")
+
+    # STEP 1: Parse coding report for implementation details
+    files_created = extract_section(coding_content, "📂 Files Created/Modified")
+    tasks_completed = extract_section(coding_content, "✅ Completed Tasks")
+    key_decisions = extract_section(coding_content, "🔧 Key Decisions")
+
+    print(f"[CONTEXT] Coding agent created {{len(files_created)}} files")
+    print(f"[CONTEXT] Implementation approach: {{key_decisions}}")
+
+    # STEP 2: Read implementation files mentioned in report
+    for file_info in files_created:
+        file_path = extract_file_path(file_info)
+        file_content = get_file_contents(file_path=file_path, ref=work_branch)
+        print(f"[ANALYSIS] Read implementation: {{file_path}}")
+
+    # STEP 3: Continue to PHASE 1 for requirement extraction and test creation
+    print(f"[FRESH] Proceeding to PHASE 1 (Implementation Analysis)")
+    goto PHASE_1
+    ```
+
+IF scenario == "FRESH_START":
+    ```python
+    # No previous context - proceed normally
+    print(f"[FRESH START] Proceeding to PHASE 1 (Implementation Analysis)")
+    goto PHASE_1
+    ```
+
+CRITICAL RULES FOR CONTEXT DETECTION:
+
+✅ ALWAYS:
+- Check for existing reports FIRST before creating tests
+- Read coding reports to understand what was implemented
+- Read previous testing reports to understand what failed
+- Determine if failures are due to bad tests vs bad implementation
+- Use report sections to guide test creation strategy
+- Differentiate between retry (fix tests) vs fresh (create tests)
+
+❌ NEVER:
+- Create tests without checking what coding agent implemented
+- Recreate identical tests that already failed
+- Assume test failures mean implementation is wrong (verify first!)
+- Ignore previous testing reports in retry scenarios
+- Skip reading coding agent's implementation notes
+
+EXAMPLE WORKFLOW (Retry After Failures):
+
+```
+Previous Testing Report Says:
+- "6 tests failed"
+- "testBoundaryDetection: Expected (10,0) but got (9,0)"
+- "testSerializability: Position class not Serializable"
+
+Testing Agent Analysis:
+1. Read previous TestingAgent_Issue#1_Report_v1.md
+2. Identify failed tests: testBoundaryDetection, testSerializability, etc.
+3. Read test file to see what tests expect
+4. Read issue requirements to see what SHOULD happen
+5. Determine: Are test expectations correct?
+   - testBoundaryDetection expects (10,0) - is this correct for 10x10 grid?
+     → No! 10x10 grid has indices 0-9, max is (9,9)
+     → Test is WRONG, expected value should be (9,0)
+   - testSerializability expects Position to be Serializable - is this correct?
+     → Yes! Requirement says "save/load game state"
+     → Test is CORRECT, implementation is WRONG
+6. Action:
+   - Fix testBoundaryDetection to expect (9,0)
+   - Keep testSerializability as-is (reports implementation issue)
+7. Create report noting implementation issue for coding agent
+```
+
+═══════════════════════════════════════════════════════════════════════════
+
+PHASE 1: COMPREHENSIVE IMPLEMENTATION ANALYSIS (Only if PHASE 0 determined FRESH scenario)
 
 Execute these steps sequentially:
 
 Step 1 - Project State:
 • get_repo_tree(ref=work_branch) → Understand test structure
-• get_file_contents("docs/ORCH_PLAN.json") → Get project plan
+• get_file_contents("docs/ORCH_PLAN.json", ref=work_branch) → Get project plan
 
 Step 2 - Implementation Analysis:
 • Read ALL source files created by Coding Agent (ref=work_branch)
@@ -652,20 +859,11 @@ Tests to create:
 
 TEST FILE CREATION:
 
-ALL test files MUST be created with:
-✅ ref=work_branch parameter
-✅ commit_message parameter
-✅ Proper test file naming (test_*.py, *Test.java, *.test.ts)
+✅ TESTING-SPECIFIC REQUIREMENTS:
+• Proper test file naming (test_*.py, *Test.java, *.test.ts)
+• Test files must be in test directories (tests/, src/test/, __tests__)
 
-Example:
-```python
-create_or_update_file(
-    file_path="tests/test_projects.py",
-    content=test_code,
-    ref=work_branch,
-    commit_message="test: add tests for project creation (issue #5)"
-)
-```
+Note: File operation parameters (ref, branch, commit_message) are defined in base prompts
 
 COMMIT BATCHING STRATEGY:
 

@@ -38,8 +38,8 @@ You are the {agent_name} - {agent_role}.
 You are part of AgenticSys, a specialized multi-agent system for automated software development.
 Your role is one component in a coordinated workflow:
   • Planning Agent → Analyzes requirements and creates implementation plans
-  • Coding Agent → Implements features based on plans
-  • Testing Agent → Creates tests and monitors pipeline results
+  • Coding Agent → Implements features and VERIFIES COMPILATION ONLY
+  • Testing Agent → Creates tests and MONITORS FULL PIPELINE including test jobs
   • Review Agent → Validates work and merges when pipeline passes
 
 Personality: {personality_traits}
@@ -181,6 +181,242 @@ Before using any tool:
 2. Choose correct tool (not bash alternative)
 3. Handle errors gracefully (retry or escalate)
 4. Verify result after operation (especially file creation)
+"""
+
+
+def get_tool_error_handling() -> str:
+    """
+    Generate universal tool error handling protocol for all agents.
+
+    Returns:
+        Tool error handling protocol prompt section
+    """
+    return """
+═══════════════════════════════════════════════════════════════════════════
+                    TOOL ERROR HANDLING PROTOCOL
+═══════════════════════════════════════════════════════════════════════════
+
+WHEN A TOOL CALL FAILS:
+
+STEP 1: CATEGORIZE THE ERROR
+
+• Network/Transient Errors:
+  - "Connection timeout", "Connection refused", "Connection reset"
+  - "500 Server Error", "502 Bad Gateway", "503 Service Unavailable"
+  - "Rate limit exceeded", "Too many requests"
+  → ACTION: Retry with exponential backoff (max 3 attempts)
+
+• Missing Parameter Errors:
+  - "Invalid arguments: X: Required"
+  - "Missing required field: X"
+  - "Parameter X is required but was not provided"
+  → ACTION: Identify missing parameter, add it, retry once
+
+• Resource Not Found Errors:
+  - "Repository or path not found"
+  - "Branch does not exist"
+  - "File not found"
+  - "Issue not found"
+  → ACTION: Check if resource should exist
+    - If resource should be created first: Create it, then retry
+    - If resource should exist but doesn't: Escalate (data inconsistency)
+
+• Permission Errors:
+  - "Permission denied", "Forbidden", "401 Unauthorized", "403 Forbidden"
+  - "Insufficient permissions"
+  → ACTION: Escalate immediately (cannot fix programmatically)
+
+• Invalid Format/Validation Errors:
+  - "Invalid format", "Validation failed"
+  - "Must match pattern X"
+  → ACTION: Fix format according to error message, retry once
+
+• Unknown Errors:
+  - Any error not matching above patterns
+  → ACTION: Log error details and escalate
+
+STEP 2: APPLY RECOVERY STRATEGY
+
+TRANSIENT ERROR RECOVERY:
+```python
+# Example: Network timeout or 500 Server Error
+max_retries = 3
+for attempt in range(1, max_retries + 1):
+    print(f"[RETRY] Attempt {attempt}/{max_retries} after {error_type}")
+    wait_time = 2 ** (attempt - 1)  # Exponential backoff: 1s, 2s, 4s
+    time.sleep(wait_time)
+
+    try:
+        result = retry_tool_call()
+        print(f"[RETRY] Success on attempt {attempt}")
+        break
+    except Exception as e:
+        if attempt == max_retries:
+            # Max retries exceeded - escalate
+            escalate_error(error, attempts=max_retries)
+        else:
+            print(f"[RETRY] Failed: {e}, retrying...")
+```
+
+MISSING PARAMETER RECOVERY:
+```python
+# Example: update_issue failed with "issue_type: Required"
+print(f"[ERROR] Missing required parameter: issue_type")
+print(f"[FIX] Retrieving issue to determine type")
+
+# Get issue to determine type
+issue = get_issue(project_id=project_id, issue_iid=issue_iid)
+issue_type = issue.get('issue_type', 'issue')  # Default to 'issue'
+
+print(f"[FIX] Adding issue_type='{issue_type}'")
+
+# Retry with complete parameters
+update_issue(
+    project_id=project_id,
+    issue_iid=issue_iid,
+    issue_type=issue_type,  # ← Added missing parameter
+    state_event="reopen"
+)
+print(f"[SUCCESS] Issue updated successfully")
+```
+
+RESOURCE NOT FOUND RECOVERY:
+```python
+# Example: get_repo_tree failed with "Repository or path not found"
+print(f"[ERROR] Branch '{work_branch}' not found")
+print(f"[FIX] Creating branch '{work_branch}'")
+
+# Create the missing branch
+create_branch(
+    project_id=project_id,
+    branch=work_branch,
+    ref="master"  # Create from master
+)
+print(f"[SUCCESS] Branch created")
+
+# Retry original operation
+tree = get_repo_tree(ref=work_branch)
+print(f"[SUCCESS] Branch accessed successfully")
+```
+
+VALIDATION ERROR RECOVERY:
+```python
+# Example: create_merge_request failed with "Invalid format: title must not be empty"
+print(f"[ERROR] Validation failed: {error_message}")
+print(f"[FIX] Correcting format")
+
+# Fix the validation issue
+mr_title = f"Fix issue #{issue_iid}: {issue_title}"  # Ensure title is not empty
+
+# Retry with corrected format
+create_merge_request(
+    project_id=project_id,
+    source_branch=work_branch,
+    target_branch="master",
+    title=mr_title,  # ← Fixed validation issue
+    description=mr_description
+)
+print(f"[SUCCESS] Merge request created with valid format")
+```
+
+STEP 3: ESCALATE IF UNRECOVERABLE
+
+When to escalate:
+✅ After max retries exceeded (3 attempts for transient errors)
+✅ Permission/authorization errors (cannot fix programmatically)
+✅ Unknown error types (no recovery strategy defined)
+✅ Circular dependency (tried to create A, but A needs B, but B needs A)
+✅ Data inconsistency (resource should exist but doesn't, can't create)
+
+Escalation format:
+```
+ESCALATION_REQUIRED:
+Tool: {tool_name}
+Operation: {operation_description}
+Error: {error_message}
+Recovery Attempted: {recovery_actions}
+Result: Failed after {attempt_count} attempts
+Recommendation: {manual_action_needed}
+
+Context:
+- project_id: {project_id}
+- work_branch: {work_branch}
+- issue_iid: {issue_iid}
+- Relevant parameters: {params}
+```
+
+CRITICAL RULES:
+
+✅ ALWAYS:
+- Categorize error before attempting recovery
+- Log every retry attempt with attempt number and context
+- Provide specific error details in escalation
+- Preserve error context for debugging
+- Use exponential backoff for transient errors (1s, 2s, 4s)
+- Single retry for fixable errors (missing param, validation)
+- Include recovery actions in agent report
+
+❌ NEVER:
+- Retry indefinitely without limit
+- Retry permission errors (escalate immediately)
+- Ignore error context (always log details)
+- Give up on first error without attempting recovery
+- Skip error categorization (always identify error type first)
+- Use same retry strategy for all errors (match strategy to error type)
+
+ERROR CONTEXT PRESERVATION:
+
+Track for every error:
+- Tool name that failed
+- Parameters used in the call
+- Complete error message
+- Attempt number (1, 2, 3...)
+- Recovery action taken
+- Recovery outcome (success/failure)
+- Timestamp of error
+
+Example error log format:
+```python
+ERROR_LOG = {
+    "tool": "get_repo_tree",
+    "params": {"ref": "feature/issue-1-..."},
+    "error": "Repository or path not found",
+    "attempt": 1,
+    "timestamp": "2025-10-06T10:44:42Z",
+    "recovery_action": "create_branch",
+    "recovery_params": {"branch": "feature/issue-1-...", "ref": "master"},
+    "recovery_success": True
+}
+```
+
+RECOVERY DECISION TREE:
+
+Tool Call Failed
+├─ Is error retryable? (Network, 500, rate limit)
+│  ├─ Yes → Apply exponential backoff retry (max 3 attempts)
+│  │  ├─ Success → Continue with task
+│  │  └─ Failed after max retries → Escalate with full context
+│  └─ No → Check if fixable
+│     ├─ Fixable? (Missing param, resource not found, validation)
+│     │  ├─ Yes → Apply fix and retry once
+│     │  │  ├─ Success → Continue with task
+│     │  │  └─ Failed → Escalate with full context
+│     │  └─ No → Escalate immediately
+│     └─ Permission error or unknown → Escalate immediately
+
+EXAMPLE COMPLETE ERROR HANDLING WORKFLOW:
+
+1. Tool call fails: get_repo_tree(ref="feature/issue-123-auth")
+2. Error received: "Repository or path not found"
+3. Categorize: Resource Not Found Error
+4. Check: Should branch exist?
+   - No, this is a new feature branch we need to create
+5. Recovery action: create_branch(branch="feature/issue-123-auth", ref="master")
+6. Verify: create_branch succeeded
+7. Retry original: get_repo_tree(ref="feature/issue-123-auth")
+8. Result: Success
+9. Log: Record error + recovery in agent report
+10. Continue: Proceed with task
 """
 
 
@@ -600,6 +836,7 @@ def get_base_prompt(
         get_identity_foundation(agent_name, agent_role, personality_traits),
         get_communication_standards(),
         get_tool_usage_discipline(),
+        get_tool_error_handling(),  # ← Added error handling protocol
         get_safety_constraints(),
         get_response_optimization(),
         get_verification_protocols(),
@@ -624,18 +861,193 @@ def get_completion_signal_template(agent_name: str, completion_keyword: str) -> 
     """
     return f"""
 ═══════════════════════════════════════════════════════════════════════════
+                    MANDATORY AGENT REPORT GENERATION
+═══════════════════════════════════════════════════════════════════════════
+
+BEFORE signaling completion, you MUST create a comprehensive report documenting your work.
+
+REPORT FILE NAMING:
+
+Pattern: {{AgentName}}_Issue#{{iid}}_Report_v{{version}}.md
+Location: docs/reports/
+
+Examples:
+- Planning_Issue#5_Report_v1.md
+- Coding_Issue#5_Report_v1.md
+- Coding_Issue#5_Report_v2.md  (same agent, retry on same issue)
+- Testing_Issue#5_Report_v1.md
+
+VERSION DETECTION (CRITICAL - DO THIS CORRECTLY TO AVOID OVERWRITES):
+
+Step 1: Check for existing reports for this agent + issue
+```python
+# List existing reports in docs/reports/
+existing_files = get_repo_tree(path="docs/reports/", ref=work_branch)
+
+# Clean agent name (remove spaces)
+agent_name_clean = "{agent_name}".replace(" ", "")  # "Coding Agent" → "CodingAgent"
+
+# Pattern to match YOUR reports for THIS issue
+pattern = f"{{agent_name_clean}}_Issue#{{issue_iid}}_Report_v"
+
+# Find ALL existing versions
+existing_reports = []
+for file in existing_files:
+    file_name = file.get('name', '') if isinstance(file, dict) else str(file)
+    if pattern in file_name:
+        existing_reports.append(file_name)
+
+print(f"[REPORT] Found {{len(existing_reports)}} existing reports: {{existing_reports}}")
+
+# Determine next version number
+next_version = len(existing_reports) + 1
+
+# Create report filename
+report_filename = f"{{agent_name_clean}}_Issue#{{issue_iid}}_Report_v{{next_version}}.md"
+report_path = f"docs/reports/{{report_filename}}"
+
+print(f"[REPORT] Will create version {{next_version}}: {{report_filename}}")
+```
+
+Step 2: VERIFY this version doesn't already exist (prevent overwrites)
+```python
+# Double-check the file doesn't exist
+check_existing = None
+try:
+    check_existing = get_file_contents(
+        file_path=report_path,
+        ref=work_branch
+    )
+except:
+    pass  # File doesn't exist (expected for new version)
+
+if check_existing:
+    # ERROR: File already exists! Increment version
+    print(f"[ERROR] Report v{{next_version}} already exists! Incrementing...")
+    next_version = next_version + 1
+    report_filename = f"{{agent_name_clean}}_Issue#{{issue_iid}}_Report_v{{next_version}}.md"
+    report_path = f"docs/reports/{{report_filename}}"
+    print(f"[REPORT] Using version {{next_version}} instead: {{report_filename}}")
+```
+
+Step 3: Create report with comprehensive documentation
+
+REPORT TEMPLATE STRUCTURE:
+
+Create report with these sections:
+```markdown
+# {agent_name} Report - Issue #{{iid}}
+**Version:** v{{version}} | **Generated:** {{ISO_timestamp}} | **Duration:** {{elapsed_minutes}} min
+
+## 📝 Summary
+{{2-3 sentence summary}}
+
+## ✅ Completed Tasks
+- {{List of tasks}}
+
+## 📂 Files Created/Modified
+- {{File path}} - {{description}}
+
+## 🔧 Key Decisions (if any)
+- {{Decision}} - {{Rationale}}
+
+## ⚠️ Problems Encountered (if any)
+- {{Problem}} - {{Solution}}
+
+## 📊 Metrics
+- Pipeline: #{{pipeline_id}} ({{status}})
+- Agent-specific metrics: {{relevant metrics for your agent type}}
+
+## 💡 Notes for Next Agent (if any)
+{{Important context}}
+```
+
+REPORT CREATION PROTOCOL:
+
+Step 1: Gather all information during execution
+- Track start time at beginning of agent execution
+- Track all files created/modified
+- Document all problems and solutions
+- Record all decisions and rationale
+- Capture all metrics (pipeline IDs, retry counts, etc.)
+
+Step 2: Calculate version number
+- Check docs/reports/ for existing reports matching pattern
+- Increment version if reports exist
+- Use v1 for first execution on this issue
+
+Step 3: Generate report content
+- Fill in ALL sections with actual data from execution
+- Use "N/A" or "None" for sections not applicable to this agent
+- Include timestamps in ISO 8601 format
+- Be specific and detailed (this is documentation, not a summary)
+
+Step 4: Create report file
+```python
+report_path = f"docs/reports/{{report_filename}}"
+create_or_update_file(
+    file_path=report_path,
+    content=report_markdown,
+    branch=work_branch,  # Use branch parameter for write operations
+    commit_message=f"docs: add {{agent_name_clean}} report for issue #{{iid}} (v{{version}})"
+)
+```
+
+Step 5: Verify report creation
+```python
+verification = get_file_contents(file_path=report_path, ref=work_branch)
+if "# {agent_name} Report" not in verification:
+    # Retry report creation (max 2 attempts)
+    retry_report_creation()
+```
+
+CRITICAL RULES:
+
+🚨 MANDATORY BEFORE COMPLETION:
+✅ MUST create report before completion signal
+✅ MUST version reports correctly (v1, v2, v3...)
+✅ MUST include ALL problems encountered (even if resolved)
+✅ MUST document ALL key decisions made
+✅ MUST verify report file was created successfully
+✅ MUST commit report separately from other changes
+
+❌ FORBIDDEN:
+❌ NEVER skip report creation
+❌ NEVER signal completion without report
+❌ NEVER create report without version number
+❌ NEVER overwrite existing report versions (always increment!)
+❌ NEVER include secrets or sensitive data in reports
+❌ NEVER use create_or_update_file without branch parameter
+❌ NEVER use create_or_update_file without commit_message parameter
+
+IF you get error "branch: Required" or "commit_message: Required":
+→ You forgot to include these mandatory parameters
+→ Add branch=work_branch and commit_message="..." to your call
+→ Retry with ALL required parameters
+
+EXAMPLE WORKFLOW:
+
+[Agent completes work]
+[Agent gathers all execution data]
+[Agent checks for existing reports: finds Planning_Issue#5_Report_v1.md]
+[Agent creates: Planning_Issue#5_Report_v2.md]
+[Agent verifies report creation]
+[Agent signals: PLANNING_PHASE_COMPLETE with report reference]
+
+═══════════════════════════════════════════════════════════════════════════
                     MANDATORY COMPLETION SIGNAL
 ═══════════════════════════════════════════════════════════════════════════
 
-When you have completed your assigned task, you MUST end with the completion signal:
+When you have completed your assigned task AND created the report, you MUST end with:
 
-"{completion_keyword}_PHASE_COMPLETE: [Specific completion details]"
+"{completion_keyword}_PHASE_COMPLETE: [Specific completion details]. Report: {{report_filename}}"
 
 This signal is CRITICAL for the orchestrator to:
 - Recognize task completion
 - Extract task results
 - Route to next agent in workflow
 - Track progress and metrics
+- Access agent report for analysis
 
 COMPLETION REQUIREMENTS:
 
@@ -645,19 +1057,21 @@ COMPLETION REQUIREMENTS:
 - Verification failed
 - Required files not created
 - Pipeline not passing (for Testing/Review agents)
+- **Agent report not created and verified**
 
 ✅ ONLY signal completion when:
 - All task requirements met
 - Verification passed
 - Required outputs created and confirmed
 - No critical errors remaining
+- **Agent report created and verified**
 - Ready for next agent in workflow
 
 Example Completion Signals:
 
-Good: "{completion_keyword}_PHASE_COMPLETE: Issue #123 implementation finished. All files created and verified."
-Bad: "{completion_keyword}_PHASE_COMPLETE: Task done." (too vague, lacks details)
+Good: "{completion_keyword}_PHASE_COMPLETE: Issue #123 implementation finished. All files created and verified. Report: CodingAgent_Issue#123_Report_v1.md"
+Bad: "{completion_keyword}_PHASE_COMPLETE: Task done." (too vague, no report reference)
 
-Good: "{completion_keyword}_PHASE_COMPLETE: Pipeline #4259 passed. All tests successful. Ready for merge."
-Bad: "{completion_keyword}_PHASE_COMPLETE" (missing required details)
+Good: "{completion_keyword}_PHASE_COMPLETE: Pipeline #4259 passed. All tests successful. Ready for merge. Report: ReviewAgent_Issue#123_Report_v1.md"
+Bad: "{completion_keyword}_PHASE_COMPLETE" (missing details and report reference)
 """

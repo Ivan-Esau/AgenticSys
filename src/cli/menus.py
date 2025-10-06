@@ -105,13 +105,13 @@ class MenuSystem:
         return mode, specific_issue, resume_path
 
     def _get_specific_issue(self) -> Optional[str]:
-        """Get specific issue ID for single issue mode."""
+        """Get specific issue IID for single issue mode."""
         while True:
-            issue_id = input("\n[TARGET] Enter Issue ID to implement: ").strip()
-            if issue_id:
-                self.display.print_success(f"Will implement issue #{issue_id}")
-                return issue_id
-            self.display.print_error("Issue ID is required for single issue mode.")
+            issue_iid = input("\n[TARGET] Enter Issue IID to implement: ").strip()
+            if issue_iid:
+                self.display.print_success(f"Will implement issue #{issue_iid}")
+                return issue_iid
+            self.display.print_error("Issue IID is required for single issue mode.")
 
     def _get_resume_path(self) -> Optional[Path]:
         """Get resume file path."""

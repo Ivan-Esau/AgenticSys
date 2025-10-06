@@ -11,7 +11,7 @@ from datetime import datetime
 class AgentMetrics:
     """Metrics for a single agent execution"""
     agent_name: str
-    issue_id: int
+    issue_iid: int
     attempt_number: int
     start_time: datetime
     end_time: Optional[datetime] = None
@@ -29,7 +29,7 @@ class AgentMetrics:
         """Convert to dictionary for JSON serialization"""
         return {
             'agent_name': self.agent_name,
-            'issue_id': self.issue_id,
+            'issue_iid': self.issue_iid,
             'attempt_number': self.attempt_number,
             'start_time': self.start_time.isoformat(),
             'end_time': self.end_time.isoformat() if self.end_time else None,
@@ -44,7 +44,7 @@ class AgentMetrics:
 class PipelineMetrics:
     """Metrics for a single pipeline execution"""
     pipeline_id: str
-    issue_id: int
+    issue_iid: int
     commit_sha: str
     triggered_by: str  # 'coding', 'testing', 'review'
     start_time: datetime
@@ -64,7 +64,7 @@ class PipelineMetrics:
         """Convert to dictionary for JSON serialization"""
         return {
             'pipeline_id': self.pipeline_id,
-            'issue_id': self.issue_id,
+            'issue_iid': self.issue_iid,
             'commit_sha': self.commit_sha,
             'triggered_by': self.triggered_by,
             'start_time': self.start_time.isoformat(),
@@ -80,7 +80,7 @@ class PipelineMetrics:
 @dataclass
 class DebuggingCycle:
     """Represents a complete debugging cycle"""
-    issue_id: int
+    issue_iid: int
     agent: str
     error_type: str
     error_message: str
@@ -99,7 +99,7 @@ class DebuggingCycle:
     def to_dict(self):
         """Convert to dictionary for JSON serialization"""
         return {
-            'issue_id': self.issue_id,
+            'issue_iid': self.issue_iid,
             'agent': self.agent,
             'error_type': self.error_type,
             'error_message': self.error_message,

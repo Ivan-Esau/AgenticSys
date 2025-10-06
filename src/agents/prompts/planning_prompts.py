@@ -36,7 +36,82 @@ def get_planning_specific_workflow(tech_stack_info: str) -> str:
 
 INTELLIGENT INFORMATION-AWARE PLANNING WORKFLOW:
 
-PHASE 1: COMPREHENSIVE STATE ANALYSIS
+🚨 CRITICAL FIRST STEP: ALWAYS check for existing plan before creating new one!
+
+PHASE 0: RETRY SCENARIO DETECTION
+
+Planning agent may be called multiple times. ALWAYS check existing state first.
+
+Step 1: Check for existing ORCH_PLAN.json
+```python
+# Try to read existing plan
+try:
+    plan_content = get_file_contents("docs/ORCH_PLAN.json", ref="master")
+    print(f"[EXISTING PLAN] Found ORCH_PLAN.json on master branch")
+
+    # Parse plan to verify it's complete
+    plan_json = json.loads(plan_content)
+    issue_count = len(plan_json.get('issues', []))
+
+    print(f"[EXISTING PLAN] Plan contains {{issue_count}} issues")
+
+    # EARLY EXIT: Return existing plan AS-IS
+    print(f"[PLANNING] Plan already exists, no need to recreate")
+    return plan_json  # Signal PLANNING_PHASE_COMPLETE with existing plan
+
+except FileNotFoundError:
+    print(f"[FRESH START] No existing plan found, creating new plan")
+    # Continue to PHASE 1
+```
+
+Step 2: Check for planning branch state
+```python
+# Check if planning-structure branch exists
+branches = list_branches(project_id=project_id)
+planning_branch = [b for b in branches if 'planning-structure' in b['name']]
+
+if planning_branch:
+    # Check if it's merged
+    mrs = list_merge_requests(
+        project_id=project_id,
+        source_branch='planning-structure',
+        state='merged'
+    )
+
+    if mrs and len(mrs) > 0:
+        print(f"[PLANNING] planning-structure branch was merged, plan is on master")
+        # Plan should be on master - read it and return
+        # (already handled in Step 1 above)
+    else:
+        print(f"[PLANNING] planning-structure branch exists but not merged")
+        # Use existing branch, verify plan completeness
+        work_branch = 'planning-structure'
+```
+
+CRITICAL EARLY EXIT CONDITIONS:
+
+IF docs/ORCH_PLAN.json exists on master:
+  ✅ Read and return existing plan AS-IS
+  ✅ Signal: PLANNING_PHASE_COMPLETE with existing plan details
+  ❌ DO NOT recreate structure
+  ❌ DO NOT create new branches
+  ❌ DO NOT reanalyze issues
+  → Planning is COMPLETE - exit immediately
+
+IF planning-structure branch was merged:
+  ✅ Get plan from master branch
+  ✅ Signal: PLANNING_PHASE_COMPLETE with plan details
+  → Planning is COMPLETE - exit immediately
+
+IF planning-structure branch exists (not merged):
+  ✅ Use existing branch
+  ❌ DO NOT create new branch
+  → Continue to verify plan on this branch
+
+═══════════════════════════════════════════════════════════════════════════
+
+PHASE 1: COMPREHENSIVE STATE ANALYSIS (Only if PHASE 0 determined no plan exists)
+
 Execute these operations sequentially to gather project state:
 
 Step 1 - Check Existing Plan:
@@ -349,8 +424,9 @@ PHASE 6: CREATE PROJECT FOUNDATION
 
 Branch Management:
 • Branch name: "planning-structure-{{project_id}}"
-• Create from: master/main (default branch)
 • Purpose: Establish project foundation
+
+Note: Branch creation rules are defined in base prompts
 
 Foundation Files to Create:
 
