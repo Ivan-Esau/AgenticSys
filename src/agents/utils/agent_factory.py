@@ -3,7 +3,7 @@ Agent factory for standardized agent creation.
 Provides consistent agent setup and configuration.
 """
 
-from typing import List, Any, Optional, Callable, Awaitable
+from typing import List, Any, Optional, Callable, Awaitable, Dict
 from ..base_agent import BaseAgent
 
 
@@ -12,7 +12,7 @@ def create_agent(
     system_prompt: str,
     tools: List[Any],
     project_id: Optional[str] = None,
-    model=None,
+    model: Optional[Any] = None,
     output_callback: Optional[Callable[[str], Awaitable[None]]] = None
 ) -> BaseAgent:
     """
@@ -39,7 +39,12 @@ def create_agent(
     )
 
 
-def create_planning_agent(tools: List[Any], project_id: str = None, pipeline_config: dict = None, output_callback=None) -> BaseAgent:
+def create_planning_agent(
+    tools: List[Any],
+    project_id: Optional[str] = None,
+    pipeline_config: Optional[Dict[str, Any]] = None,
+    output_callback: Optional[Callable[[str], Awaitable[None]]] = None
+) -> BaseAgent:
     """
     Create a planning agent with standard configuration.
 
@@ -66,7 +71,12 @@ def create_planning_agent(tools: List[Any], project_id: str = None, pipeline_con
     )
 
 
-def create_coding_agent(tools: List[Any], project_id: str = None, pipeline_config: dict = None, output_callback=None) -> BaseAgent:
+def create_coding_agent(
+    tools: List[Any],
+    project_id: Optional[str] = None,
+    pipeline_config: Optional[Dict[str, Any]] = None,
+    output_callback: Optional[Callable[[str], Awaitable[None]]] = None
+) -> BaseAgent:
     """
     Create a coding agent with standard configuration.
 
@@ -93,7 +103,12 @@ def create_coding_agent(tools: List[Any], project_id: str = None, pipeline_confi
     )
 
 
-def create_testing_agent(tools: List[Any], project_id: str = None, pipeline_config: dict = None, output_callback=None) -> BaseAgent:
+def create_testing_agent(
+    tools: List[Any],
+    project_id: Optional[str] = None,
+    pipeline_config: Optional[Dict[str, Any]] = None,
+    output_callback: Optional[Callable[[str], Awaitable[None]]] = None
+) -> BaseAgent:
     """
     Create a testing agent with standard configuration.
 
@@ -120,7 +135,12 @@ def create_testing_agent(tools: List[Any], project_id: str = None, pipeline_conf
     )
 
 
-def create_review_agent(tools: List[Any], project_id: str = None, pipeline_config: dict = None, output_callback=None) -> BaseAgent:
+def create_review_agent(
+    tools: List[Any],
+    project_id: Optional[str] = None,
+    pipeline_config: Optional[Dict[str, Any]] = None,
+    output_callback: Optional[Callable[[str], Awaitable[None]]] = None
+) -> BaseAgent:
     """
     Create a review agent with standard configuration.
 

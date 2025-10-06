@@ -5,7 +5,7 @@ Contains helper functions for JSON extraction, text processing, and common opera
 
 import re
 import json
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 
 
 def extract_json_block(text: str) -> Optional[Dict[Any, Any]]:
