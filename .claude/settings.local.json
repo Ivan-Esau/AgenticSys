@@ -35,7 +35,21 @@
       "Bash(del \"C:\\Users\\esaui\\Desktop\\PythonProjects\\AgenticSys\\src\\orchestrator\\pipeline\\pipeline_optimizer.py\")",
       "WebFetch(domain:langchain-ai.github.io)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(pytest:*)",
+      "Bash(node:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker inspect:*)",
+      "Bash(xargs ls:*)",
+      "Bash(xargs basename:*)",
+      "Bash(if [ -f \"docs/architektur_diagramme.md\" ])",
+      "Bash(then mv docs/architektur_diagramme.md docs/architecture/)",
+      "Bash(fi)",
+      "Bash(if [ -f \"docs/uml_diagramme.md\" ])",
+      "Bash(then mv docs/uml_diagramme.md docs/architecture/)",
+      "Bash(docker compose:*)"
     ],
     "deny": [],
     "ask": []

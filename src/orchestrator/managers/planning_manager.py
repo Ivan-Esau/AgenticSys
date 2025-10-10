@@ -371,35 +371,47 @@ class PlanningManager:
         try:
             print(f"[PLANNING] Loading ORCH_PLAN.json from {ref} branch...")
 
-            # Try to get ORCH_PLAN.json from docs/ directory
-            result = await mcp_client.run_tool("get_file_contents", {
+            # Try to get ORCH_PLAN.json from docs/ directory using MCP tool
+            tool = mcp_client.get_tool("get_file_contents")
+            if not tool:
+                print("[PLANNING] [WARNING] get_file_contents tool not available")
+                return False
+
+            result = await tool.ainvoke({
                 "project_id": str(project_id),
                 "file_path": "docs/ORCH_PLAN.json",
                 "ref": ref
             })
 
-            if result and isinstance(result, str):
+            # Handle result - could be dict or string
+            file_content = None
+            if isinstance(result, dict) and 'content' in result:
+                file_content = result['content']
+            elif isinstance(result, str):
+                file_content = result
+
+            if file_content:
                 import json
                 try:
-                    plan_json = json.loads(result)
+                    plan_json = json.loads(file_content)
 
                     # Validate it has the required structure
                     if 'implementation_order' in plan_json:
                         self.current_plan = plan_json
-                        print(f"[PLANNING] ✅ Loaded ORCH_PLAN.json with {len(plan_json.get('implementation_order', []))} issues")
+                        print(f"[PLANNING] [OK] Loaded ORCH_PLAN.json with {len(plan_json.get('implementation_order', []))} issues")
                         print(f"[PLANNING] Implementation order: {plan_json.get('implementation_order', [])}")
                         return True
                     else:
-                        print("[PLANNING] ⚠️ ORCH_PLAN.json missing 'implementation_order' field")
+                        print("[PLANNING] [WARNING] ORCH_PLAN.json missing 'implementation_order' field")
                         return False
 
                 except json.JSONDecodeError as e:
-                    print(f"[PLANNING] ⚠️ Failed to parse ORCH_PLAN.json: {e}")
+                    print(f"[PLANNING] [WARNING] Failed to parse ORCH_PLAN.json: {e}")
                     return False
             else:
-                print("[PLANNING] ⚠️ ORCH_PLAN.json not found in repository")
+                print("[PLANNING] [WARNING] ORCH_PLAN.json not found in repository")
                 return False
 
         except Exception as e:
-            print(f"[PLANNING] ⚠️ Error loading ORCH_PLAN.json: {e}")
+            print(f"[PLANNING] [WARNING] Error loading ORCH_PLAN.json: {e}")
             return False

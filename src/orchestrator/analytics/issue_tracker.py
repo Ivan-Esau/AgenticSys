@@ -183,6 +183,15 @@ class IssueTracker:
         # Total retries across all agents
         total_retries = sum(metrics['retries'] for metrics in self.agent_metrics.values())
 
+        # Clean agent_metrics: remove any leftover datetime objects
+        cleaned_agent_metrics = {}
+        for agent, metrics in self.agent_metrics.items():
+            cleaned_metrics = metrics.copy()
+            if 'start_time' in cleaned_metrics and isinstance(cleaned_metrics['start_time'], datetime):
+                # Should not happen, but clean it up if it does
+                del cleaned_metrics['start_time']
+            cleaned_agent_metrics[agent] = cleaned_metrics
+
         final_report = {
             'run_id': self.run_id,
             'issue_iid': self.issue_iid,
@@ -192,7 +201,7 @@ class IssueTracker:
             'duration_seconds': duration,
 
             # Agent metrics
-            'agent_metrics': self.agent_metrics,
+            'agent_metrics': cleaned_agent_metrics,
             'total_agent_retries': total_retries,
 
             # Pipeline metrics
@@ -230,11 +239,20 @@ class IssueTracker:
 
     def _save_metrics(self):
         """Save current metrics to file (incremental updates)"""
+        # Clean agent_metrics: convert datetime objects to strings
+        cleaned_agent_metrics = {}
+        for agent, metrics in self.agent_metrics.items():
+            cleaned_metrics = metrics.copy()
+            if 'start_time' in cleaned_metrics and isinstance(cleaned_metrics['start_time'], datetime):
+                # Agent is currently running - don't include start_time in saved metrics
+                del cleaned_metrics['start_time']
+            cleaned_agent_metrics[agent] = cleaned_metrics
+
         current_data = {
             'run_id': self.run_id,
             'issue_iid': self.issue_iid,
             'start_time': self.start_time.isoformat(),
-            'agent_metrics': self.agent_metrics,
+            'agent_metrics': cleaned_agent_metrics,
             'pipeline_attempts': len(self.pipeline_attempts),
             'succeeded_pipelines': self.succeeded_pipelines,
             'failed_pipelines': self.failed_pipelines,

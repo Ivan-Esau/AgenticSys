@@ -501,10 +501,17 @@ if not mr.get('merge_status') == 'can_be_merged':
 
 # Step 4: Perform merge
 print(f"[MERGE] Merging MR !{mr_iid}: {mr['title']}")
+
+# Planning branch vs regular branch: different merge commit messages
+if is_planning_branch:
+    merge_commit_msg = f"Merge branch '{work_branch}' into 'master'\n\nAdds planning documents (ORCH_PLAN.json, ARCHITECTURE.md, README.md)"
+else:
+    merge_commit_msg = f"Merge branch '{work_branch}' into 'master'\n\nCloses #{{{{issue_iid}}}}"
+
 merge_result = merge_merge_request(
     project_id=project_id,
     mr_iid=mr_iid,
-    merge_commit_message=f"Merge branch '{work_branch}' into 'master'\n\nCloses #{{{{issue_iid}}}}",
+    merge_commit_message=merge_commit_msg,
     should_remove_source_branch=False,  # Manual cleanup for safety
     squash=False  # Preserve commit history
 )
@@ -512,21 +519,27 @@ merge_result = merge_merge_request(
 print(f"[MERGE] ✅ MR !{mr_iid} merged successfully")
 print(f"[MERGE] Merge commit: {merge_result['merge_commit_sha']}")
 
-# Step 5: Close related issue
-print(f"[MERGE] Closing issue #{{{{issue_iid}}}}")
-update_issue(
-    project_id=project_id,
-    issue_iid=issue_iid,
-    state_event="close"
-)
-print(f"[MERGE] ✅ Issue #{{{{issue_iid}}}} closed")
+# Step 5: Close related issue (skip for planning branches)
+if not is_planning_branch and issue_iid:
+    print(f"[MERGE] Closing issue #{{{{issue_iid}}}}")
+    update_issue(
+        project_id=project_id,
+        issue_iid=issue_iid,
+        state_event="close"
+    )
+    print(f"[MERGE] ✅ Issue #{{{{issue_iid}}}} closed")
+else:
+    print(f"[MERGE] Skipping issue closure (planning branch)")
 
 # Step 6: Cleanup branch (after verification)
 print(f"[MERGE] Deleting branch: {work_branch}")
 delete_branch(project_id=project_id, branch_name=work_branch)
 print(f"[MERGE] ✅ Branch {work_branch} deleted")
 
-print(f"[COMPLETE] Review phase complete for issue #{{{{issue_iid}}}}")
+if is_planning_branch:
+    print(f"[COMPLETE] Review phase complete for planning-structure branch")
+else:
+    print(f"[COMPLETE] Review phase complete for issue #{{{{issue_iid}}}}")
 ```
 
 MERGE SAFETY RULES:
@@ -654,6 +667,27 @@ Step 1 - Project Context:
 • get_repo_tree(ref=work_branch) → Understand changes
 • list_merge_requests(source_branch=work_branch) → Check existing MRs
 
+Step 1.5 - Read ALL Planning Documents:
+Read ALL planning documents to understand the architecture and requirements:
+
+🚨 PLANNING DOCUMENTS ARE ON MASTER BRANCH (Planning Agent commits directly to master)
+
+REQUIRED:
+• get_file_contents("docs/ORCH_PLAN.json", ref="master")
+  - Read user_interface, package_structure, core_entities
+  - Read architecture_decision patterns
+  - Understand what was planned
+
+OPTIONAL (read if exists):
+• get_file_contents("docs/ARCHITECTURE.md", ref="master")
+  - Detailed architecture decisions
+  - Design patterns and principles
+
+• get_file_contents("docs/README.md", ref="master")
+  - Project overview
+
+🚨 CRITICAL: Read planning documents from MASTER to verify implementation matches the plan
+
 Step 2 - Issue Context (if creating MR):
 • Extract issue IID from branch name: "feature/issue-123-*" → issue_iid=123
 • get_issue(issue_iid) → Get complete issue description
@@ -678,18 +712,29 @@ How to check:
 ```python
 # Extract issue IID from branch name
 # Example: "feature/issue-123-description" → issue_iid = 123
+# Special case: "planning-structure-*" → planning mode (no issue IID)
 import re
-match = re.search(r'issue-(\d+)', work_branch)
-issue_iid = int(match.group(1)) if match else None
 
-if not issue_iid:
-    print("[ERROR] Could not extract issue IID from branch name")
-    return
+# Check if this is the planning-structure branch
+is_planning_branch = work_branch.startswith('planning-structure')
 
-# Get issue details
-issue = get_issue(project_id=project_id, issue_iid=issue_iid)
+if is_planning_branch:
+    print("[REVIEW] Detected planning-structure branch - special merge mode")
+    print("[REVIEW] Skipping issue IID extraction for planning documents")
+    issue_iid = None
+    issue = None
+else:
+    match = re.search(r'issue-(\d+)', work_branch)
+    issue_iid = int(match.group(1)) if match else None
 
-if issue['state'] == 'closed':
+    if not issue_iid:
+        print("[ERROR] Could not extract issue IID from branch name")
+        return
+
+    # Get issue details
+    issue = get_issue(project_id=project_id, issue_iid=issue_iid)
+
+if issue and issue['state'] == 'closed':
     # Issue is closed - but is the branch merged?
     print(f"[REVIEW] Issue #{{issue_iid}} is closed - checking if branch is merged...")
 
@@ -732,6 +777,13 @@ IF MR exists:
 ELSE:
   → Create MR with comprehensive context (REGARDLESS OF ISSUE STATE)
   → Use MR creation best practices (see above)
+
+  For planning branches (planning-structure-*):
+  → Title: "Add planning documents (ORCH_PLAN.json, ARCHITECTURE.md)"
+  → Description: "Creates project planning documents based on GitLab issues"
+  → NO "Closes #X" reference
+
+  For feature branches (feature-issue-X):
   → Include "Closes #{{{{issue_iid}}}}" in description
   → Set proper title: "{{{{type}}}}: {{{{description}}}} (#{{{{issue_iid}}}})"
 
@@ -825,14 +877,28 @@ while retry_count < max_retries:
 
 PHASE 2.5: COMPREHENSIVE REQUIREMENT & ACCEPTANCE CRITERIA VALIDATION (MANDATORY)
 
-🚨 CRITICAL: Before merging, validate ALL requirements and acceptance criteria are met.
+🚨 CRITICAL: This is the FINAL CHECKPOINT before merge. You are the last line of defense.
+🚨 CRITICAL: You MUST fetch the actual GitLab issue and validate EVERYTHING.
+
+⚠️ SPECIAL CASE: Skip this phase if work_branch starts with "planning-structure"
+   - Planning branches contain only docs/ files (ORCH_PLAN.json, ARCHITECTURE.md, README.md)
+   - No issue requirements or acceptance criteria to validate
+   - Pipeline still must pass in Phase 2
+   - Proceed directly to Phase 3 (Merge)
+
+📋 For regular feature branches, you must verify:
+- Coding Agent implemented ALL requirements from the GitLab issue
+- Testing Agent tested ALL acceptance criteria from the GitLab issue
+- Nothing was skipped, forgotten, or left incomplete
+
+DO NOT rely on agent reports alone - fetch the issue and verify against the source of truth.
 
 This is the FINAL CHECKPOINT before merge. Review Agent must verify:
 1. Technical validation (pipeline success) ✓ Done in Phase 2
-2. Functional validation (requirements met) ← NEW: Do here
-3. Quality validation (acceptance criteria) ← NEW: Do here
+2. Functional validation (ALL requirements met) ← MANDATORY for feature branches
+3. Quality validation (ALL acceptance criteria tested) ← MANDATORY for feature branches
 
-Issue Data Fetching:
+Issue Data Fetching (skip for planning branches):
 
 Step 1: Extract issue IID
 ```python
@@ -1087,25 +1153,34 @@ Prerequisites:
 
 Execute Merge:
 ```python
-# 1. Merge MR
+# 1. Merge MR (different messages for planning vs feature branches)
+if is_planning_branch:
+    merge_commit_msg = f"Merge branch '{{work_branch}}' into 'master'\\n\\nAdds planning documents (ORCH_PLAN.json, ARCHITECTURE.md, README.md)"
+else:
+    merge_commit_msg = f"Merge branch '{{work_branch}}' into 'master'\\n\\nCloses #{{issue_iid}}"
+
 merge_result = merge_merge_request(
     project_id=project_id,
     mr_iid=mr_iid,
-    merge_commit_message=f"Merge branch '{{work_branch}}' into 'master'\\n\\nCloses #{{issue_iid}}"
+    merge_commit_message=merge_commit_msg
 )
 
-# 2. Close issue
-update_issue(
-    project_id=project_id,
-    issue_iid=issue_iid,
-    state_event="close"
-)
+# 2. Close issue (skip for planning branches)
+if not is_planning_branch and issue_iid:
+    update_issue(
+        project_id=project_id,
+        issue_iid=issue_iid,
+        state_event="close"
+    )
 
 # 3. Cleanup branch
 delete_branch(project_id=project_id, branch_name=work_branch)
 
 # 4. Signal completion
-print(f"REVIEW_PHASE_COMPLETE: Issue #{{issue_iid}} merged and closed successfully.")
+if is_planning_branch:
+    print(f"REVIEW_PHASE_COMPLETE: Planning branch merged successfully.")
+else:
+    print(f"REVIEW_PHASE_COMPLETE: Issue #{{issue_iid}} merged and closed successfully.")
 ```
 
 PHASE 4: POST-MERGE VERIFICATION

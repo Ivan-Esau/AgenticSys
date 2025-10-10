@@ -9,6 +9,7 @@ import json
 import asyncio
 from datetime import datetime
 import traceback
+from fastapi.encoders import jsonable_encoder
 
 
 class ConnectionManager:
@@ -275,7 +276,7 @@ class ConnectionManager:
         # Replay all stored messages
         for message in self.message_history:
             try:
-                await websocket.send_text(json.dumps(message))
+                await websocket.send_text(json.dumps(self._encode_for_transport(message), ensure_ascii=False))
                 # Small delay to prevent overwhelming the client
                 await asyncio.sleep(0.001)
             except Exception as e:
@@ -283,6 +284,15 @@ class ConnectionManager:
                 break
 
         print("[WS] History replay complete")
+
+    def _encode_for_transport(self, data: Any) -> Any:
+        """Encode data for WebSocket transport using FastAPI's jsonable_encoder"""
+        try:
+            return jsonable_encoder(data)
+        except Exception as e:
+            print(f"[WS-ERROR] Failed to encode data for transport: {e}")
+            # Return simple string representation as fallback
+            return {"error": "encoding_failed", "data": str(data)}
 
     async def _send_session_state(self, websocket: WebSocket):
         """Send current session state to client"""
@@ -296,14 +306,15 @@ class ConnectionManager:
 
     async def send_event(self, event_type: str, data: Any):
         """Send an event to all connected clients"""
-        message = {
+        encoded_data = self._encode_for_transport(data)
+        message = self._encode_for_transport({
             "type": event_type,
-            "data": data,
+            "data": encoded_data,
             "timestamp": datetime.now().isoformat()
-        }
+        })
 
-        # Store in history for replay
-        self._store_message(event_type, data)
+        # Store message for history replay
+        self._store_message(event_type, encoded_data)
 
         # Broadcast to all connected clients
         await self.broadcast_json(message)

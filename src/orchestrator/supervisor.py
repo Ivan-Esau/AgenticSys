@@ -218,10 +218,12 @@ class Supervisor:
             return False
 
         # CRITICAL: Check if issue is already completed before starting workflow
-        print(f"[CHECK] Verifying completion status for issue #{issue_iid}...")
+        print(f"[WORKFLOW] Step 9.1: Checking if issue #{issue_iid} is already completed")
+        print(f"[DEBUG] Issue title: {issue_title}")
         is_completed = await self.issue_manager.is_issue_completed(issue)
+        print(f"[DEBUG] Completion check result: {is_completed}")
         if is_completed:
-            print(f"[SKIP] Issue #{issue_iid} is already closed/merged - skipping implementation")
+            print(f"[WORKFLOW] [OK] Issue #{issue_iid} already closed/merged - skipping")
             self.issue_manager.track_completed_issue(issue)
             return True  # Return success since work is already done
 
@@ -233,39 +235,49 @@ class Supervisor:
         self.executor.issue_tracker = self.current_issue_tracker
 
         # Retry loop
+        print(f"[WORKFLOW] Step 9.2: Starting retry loop (max {retries} attempts)")
         for attempt in range(retries):
             if attempt > 0:
-                print(f"[RETRY] Issue #{issue_iid} attempt {attempt + 1}/{retries}")
+                print(f"\n[WORKFLOW] [RETRY] Issue #{issue_iid} - Attempt {attempt + 1}/{retries}")
+                print(f"[DEBUG] Retry delay: {self.issue_manager.retry_delay * attempt}s")
                 await asyncio.sleep(self.issue_manager.retry_delay * attempt)
 
-            print(f"\n[ISSUE #{issue_iid}] Starting: {issue_title}")
-            print(f"[ISSUE #{issue_iid}] Implementation starting")
+            print(f"\n{'='*70}")
+            print(f"[WORKFLOW] Issue #{issue_iid}: {issue_title}")
+            print(f"[WORKFLOW] Attempt {attempt + 1}/{retries}")
+            print(f"{'='*70}")
 
             try:
                 # Create feature branch name for this issue
                 feature_branch = self.issue_manager.create_feature_branch_name(issue)
+                print(f"[WORKFLOW] Step 9.3: Created feature branch: {feature_branch}")
 
                 # Phase 1: Coding
+                print(f"\n[WORKFLOW] Step 10: PHASE 1/3 - Coding Agent Execution")
+                print(f"[DEBUG] Target branch: {feature_branch}")
+                print(f"[DEBUG] Issue IID: {issue_iid}")
                 await self._update_pipeline_stage("coding", "running")
-                print(f"[ISSUE #{issue_iid}] Phase 1/3: Coding...")
-                print(f"[ISSUE #{issue_iid}] Working on branch: {feature_branch}")
+
                 coding_result = await self.route_task(
                     "coding",
                     issue=issue,
                     branch=feature_branch
                 )
 
+                print(f"[DEBUG] Coding Agent result: {coding_result}")
                 if not coding_result:
-                    print(f"[ISSUE #{issue_iid}] Coding phase failed")
+                    print(f"[WORKFLOW] [X] Coding phase failed - will retry")
                     await self._update_pipeline_stage("coding", "failed")
                     continue  # Retry the whole issue
 
+                print(f"[WORKFLOW] [OK] Coding phase completed successfully")
                 await self._update_pipeline_stage("coding", "completed")
 
                 # Phase 2: Testing
+                print(f"\n[WORKFLOW] Step 11: PHASE 2/3 - Testing Agent Execution")
+                print(f"[DEBUG] Target branch: {feature_branch}")
+                print(f"[DEBUG] Minimum coverage requirement: {self.min_coverage}%")
                 await self._update_pipeline_stage("testing", "running")
-                print(f"[ISSUE #{issue_iid}] Phase 2/3: Testing...")
-                print(f"[ISSUE #{issue_iid}] Running tests with minimum {self.min_coverage}% coverage requirement")
 
                 testing_result = await self.route_task(
                     "testing",
@@ -273,17 +285,21 @@ class Supervisor:
                     branch=feature_branch
                 )
 
+                print(f"[DEBUG] Testing Agent result: {testing_result}")
                 if not testing_result:
-                    print(f"[ISSUE #{issue_iid}] [WARN] Testing phase failed")
+                    print(f"[WORKFLOW] [!] Testing phase failed - continuing to review")
                     await self._update_pipeline_stage("testing", "failed")
                     # Testing agent handles pipeline analysis via MCP tools
+                else:
+                    print(f"[WORKFLOW] [OK] Testing phase completed successfully")
 
                 await self._update_pipeline_stage("testing", "completed")
 
                 # Phase 3: Review & Merge Request
+                print(f"\n[WORKFLOW] Step 12: PHASE 3/3 - Review Agent Execution")
+                print(f"[DEBUG] Target branch: {feature_branch}")
+                print(f"[DEBUG] Will validate pipeline and create MR")
                 await self._update_pipeline_stage("review", "running")
-                print(f"[ISSUE #{issue_iid}] Phase 3/3: Review & MR...")
-                # Review agent checks pipeline status via MCP tools
 
                 review_result = await self.route_task(
                     "review",
@@ -291,26 +307,35 @@ class Supervisor:
                     branch=feature_branch
                 )
 
+                print(f"[DEBUG] Review Agent result: {review_result}")
                 if review_result:
                     await self._update_pipeline_stage("review", "completed")
-                    print(f"[ISSUE #{issue_iid}] [OK] Successfully implemented")
+                    print(f"[WORKFLOW] [OK] Review phase completed - MR merged successfully")
+                    print(f"\n[WORKFLOW] Step 13: Marking issue #{issue_iid} as complete")
                     self.issue_manager.track_completed_issue(issue)
 
                     # Finalize issue tracking and export to CSV
                     if self.current_issue_tracker:
+                        print(f"[WORKFLOW] Step 14: Exporting analytics to CSV")
                         issue_report = self.current_issue_tracker.finalize_issue('completed')
                         self.csv_exporter.export_issue(self.run_logger.run_id, issue_report)
                         self.run_logger.record_success()
+                        print(f"[DEBUG] Issue report exported successfully")
 
+                    print(f"\n[WORKFLOW] [OK] Issue #{issue_iid} COMPLETED SUCCESSFULLY")
                     return True  # Success!
                 else:
+                    print(f"[WORKFLOW] [X] Review phase failed - will retry")
                     await self._update_pipeline_stage("review", "failed")
 
             except Exception as e:
-                print(f"[ISSUE #{issue_iid}] Implementation failed: {e}")
+                print(f"\n[WORKFLOW] [X] Exception occurred during implementation")
+                print(f"[DEBUG] Error type: {type(e).__name__}")
+                print(f"[DEBUG] Error message: {str(e)}")
 
                 # Track error in issue tracker
                 if self.current_issue_tracker:
+                    print(f"[DEBUG] Recording error in issue tracker")
                     self.current_issue_tracker.errors.append({
                         'type': 'implementation_error',
                         'message': str(e),
@@ -319,14 +344,20 @@ class Supervisor:
                     })
 
                 if attempt < retries - 1:
+                    print(f"[WORKFLOW] Will retry (attempt {attempt + 1}/{retries})")
                     continue  # Retry
-                return False  # Final failure
+                else:
+                    print(f"[WORKFLOW] [X] All retries exhausted - marking as failed")
+                    return False  # Final failure
 
         # All retries failed - finalize issue as failed
+        print(f"\n[WORKFLOW] [X] Issue #{issue_iid} FAILED after {retries} attempts")
         if self.current_issue_tracker:
+            print(f"[WORKFLOW] Finalizing failed issue and exporting to CSV")
             issue_report = self.current_issue_tracker.finalize_issue('failed')
             self.csv_exporter.export_issue(self.run_logger.run_id, issue_report)
             self.run_logger.record_error()
+            print(f"[DEBUG] Failed issue report exported")
 
         return False
 
@@ -363,10 +394,14 @@ class Supervisor:
         print("\n" + "="*60)
         print("PHASE 1: PLANNING & ANALYSIS")
         print("="*60)
+        print(f"[WORKFLOW] Step 1: Planning Agent Execution")
+        print(f"[DEBUG] Execution mode: {mode}")
+        print(f"[DEBUG] Apply changes: {mode in ['implement', 'single']}")
 
         apply_changes = mode in ["implement", "single"]
 
         # Run planning analysis
+        print(f"[WORKFLOW] Delegating to Planning Agent...")
         success = await self.planning_manager.execute_planning_with_retry(
             self.route_task,
             apply_changes
@@ -374,15 +409,13 @@ class Supervisor:
 
         if not success:
             print("[ERROR] Planning analysis failed after retries")
+            print("[WORKFLOW] [FAILED] Planning Agent execution FAILED")
             await self._update_pipeline_stage("planning", "failed")
             self.state = ExecutionState.FAILED
             return
 
+        print("[WORKFLOW] [OK] Planning Agent execution successful")
         await self._update_pipeline_stage("planning", "completed")
-
-        # Store the planning result
-        if hasattr(self.executor, 'current_plan') and self.executor.current_plan:
-            self.planning_manager.store_plan(self.executor.current_plan)
 
         if mode == "analyze":
             print("\n[COMPLETE] Analysis done. Run with --apply to implement.")
@@ -390,56 +423,35 @@ class Supervisor:
             await self.show_summary()
             return
 
-        # Phase 1.5: Review and Merge Planning Work (if branch exists)
-        # Check if planning-structure branch exists and needs merging
+        # Phase 1.5: Load Planning Documents from Master
+        # Planning Agent commits directly to master, so load parsed ORCH_PLAN.json
+        print(f"\n[WORKFLOW] Step 2: Loading ORCH_PLAN.json from master")
+        print("[DEBUG] Planning Agent commits directly to master - loading structured plan")
+        print("[DEBUG] Loading from: docs/ORCH_PLAN.json on master branch")
+
         try:
-            branches = await self.mcp.run_tool("list_branches", {
-                "project_id": str(self.project_id)
-            })
+            plan_loaded = await self.planning_manager.load_plan_from_repository(
+                self.mcp,
+                self.project_id,
+                ref="master"
+            )
 
-            # Check if planning-structure branch exists
-            planning_branch_exists = False
-            if branches and isinstance(branches, list):
-                for branch in branches:
-                    if branch.get('name', '').startswith('planning-structure'):
-                        planning_branch_exists = True
-                        planning_branch = branch.get('name')
-                        break
-
-            if planning_branch_exists:
-                print("\n" + "="*60)
-                print("PHASE 1.5: REVIEW PLANNING WORK")
-                print("="*60)
-                print(f"[REVIEW] Found planning branch: {planning_branch}")
-                print("[REVIEW] Delegating to Review Agent for merge...")
-
-                # Execute review agent for planning work
-                review_success = await self.route_task(
-                    "REVIEW",
-                    issue={"iid": "planning", "title": "Planning Structure Merge"},
-                    branch=planning_branch
-                )
-
-                if not review_success:
-                    print("[WARNING] Planning review failed, but continuing...")
+            if plan_loaded:
+                print("[WORKFLOW] [OK] ORCH_PLAN.json loaded successfully")
+                plan = self.planning_manager.get_current_plan()
+                if plan and isinstance(plan, dict) and 'implementation_order' in plan:
+                    order = plan['implementation_order']
+                    print(f"[DEBUG] Implementation order: {[item.get('issue_id') for item in order]}")
+                    print(f"[DEBUG] Total issues in plan: {len(order)}")
                 else:
-                    print("[REVIEW] Planning work reviewed and merged successfully")
-
-                    # Load ORCH_PLAN.json from master branch after successful merge
-                    print("[PLANNING] Loading implementation order from merged ORCH_PLAN.json...")
-                    plan_loaded = await self.planning_manager.load_plan_from_repository(
-                        self.mcp,
-                        self.project_id,
-                        ref="master"
-                    )
-
-                    if plan_loaded:
-                        print("[PLANNING] ✅ Successfully loaded ORCH_PLAN.json - issues will be implemented in correct order")
-                    else:
-                        print("[PLANNING] ⚠️ Could not load ORCH_PLAN.json - will use fallback prioritization")
+                    print("[DEBUG] Plan structure: unknown or missing implementation_order")
+            else:
+                print("[WORKFLOW] [WARNING] Could not load ORCH_PLAN.json - will use fallback prioritization")
 
         except Exception as e:
-            print(f"[WARNING] Could not check for planning branch: {str(e)}")
+            print(f"[WARNING] Could not load planning documents: {str(e)}")
+            print(f"[DEBUG] Exception type: {type(e).__name__}")
+            print("[WORKFLOW] [WARNING] Using fallback prioritization")
 
         # Phase 2: Implementation Preparation
         print("\n" + "="*60)
@@ -448,7 +460,7 @@ class Supervisor:
 
         # Load ORCH_PLAN.json if not already loaded (fallback for resumed sessions)
         if not self.planning_manager.get_current_plan():
-            print("[PLANNING] Plan not in memory, attempting to load from repository...")
+            print("[WORKFLOW] Plan not in memory, attempting to load from repository...")
             await self.planning_manager.load_plan_from_repository(
                 self.mcp,
                 self.project_id,
@@ -456,17 +468,28 @@ class Supervisor:
             )
 
         # Fetch issues from GitLab
-        print("[ISSUES] Fetching issues from GitLab...")
+        print(f"\n[WORKFLOW] Step 6: Fetching all open issues from GitLab")
+        print(f"[DEBUG] Project ID: {self.project_id}")
+        print(f"[DEBUG] Issue state filter: opened")
         all_gitlab_issues = await self.issue_manager.fetch_gitlab_issues()
 
         if not all_gitlab_issues:
-            print("[ISSUES] No open issues found")
+            print("[WORKFLOW] [WARNING] No open issues found in GitLab")
+            print("[DEBUG] Possible reasons: all issues closed, project has no issues, or API error")
             await self.show_summary()
             return
 
-        print(f"[ISSUES] Found {len(all_gitlab_issues)} open issues from GitLab")
+        print(f"[WORKFLOW] [OK] Fetched {len(all_gitlab_issues)} open issues from GitLab")
+        print(f"[DEBUG] Issue IIDs: {[get_issue_iid(i) for i in all_gitlab_issues]}")
 
         # Apply planning prioritization
+        print(f"\n[WORKFLOW] Step 7: Applying ORCH_PLAN.json priority order")
+        current_plan = self.planning_manager.get_current_plan()
+        if current_plan and isinstance(current_plan, dict) and 'implementation_order' in current_plan:
+            print(f"[DEBUG] Using ORCH_PLAN.json with {len(current_plan['implementation_order'])} issues")
+        else:
+            print(f"[DEBUG] Using fallback prioritization (no ORCH_PLAN.json)")
+
         issues = await self.planning_manager.apply_planning_prioritization(
             all_gitlab_issues,
             self.planning_manager.get_current_plan(),
@@ -474,14 +497,18 @@ class Supervisor:
         )
 
         if issues:
-            print(f"[ISSUES] After planning prioritization and filtering: {len(issues)} issues to implement")
+            print(f"\n[WORKFLOW] Step 8: Filtering out completed issues")
+            print(f"[WORKFLOW] [OK] {len(issues)} issues ready for implementation")
+            print(f"[DEBUG] Filtered out: {len(all_gitlab_issues) - len(issues)} completed/merged issues")
+            print(f"\n[PRIORITY] Implementation order:")
             # Show issue details in priority order
-            for issue in issues[:5]:  # Show first 5
+            for idx, issue in enumerate(issues, 1):
                 issue_iid = get_issue_iid(issue)
                 title = issue.get('title', 'No title')
-                print(f"  - Issue #{issue_iid}: {title}")
+                print(f"  {idx}. Issue #{issue_iid}: {title}")
         else:
-            print("[ISSUES] No issues need implementation (all completed or merged)")
+            print("[WORKFLOW] [WARNING] No issues need implementation (all completed or merged)")
+            print("[DEBUG] All issues have been filtered out - nothing to do")
             await self.show_summary()
             return
 
@@ -494,47 +521,66 @@ class Supervisor:
             # Get issues to implement
             if specific_issue:
                 # Single issue mode
+                print(f"[DEBUG] Single issue mode: filtering for issue #{specific_issue}")
                 issues_to_implement = [
                     i for i in issues
                     if str(i.get("iid")) == str(specific_issue)
                 ]
                 if not issues_to_implement:
                     print(f"[ERROR] Issue {specific_issue} not found or already completed")
+                    print(f"[DEBUG] Available issues: {[get_issue_iid(i) for i in issues]}")
                     return
+                print(f"[DEBUG] Found issue #{specific_issue} in queue")
             else:
                 # All issues mode
+                print(f"[DEBUG] All issues mode: implementing all {len(issues)} issues")
                 issues_to_implement = issues
 
-            print(f"[PLAN] Will implement {len(issues_to_implement)} issues")
+            print(f"\n[WORKFLOW] Will implement {len(issues_to_implement)} issues sequentially")
+            print(f"[DEBUG] Execution sequence:")
 
             # Show issue titles for clarity
-            for issue in issues_to_implement[:5]:  # Show first 5
-                print(f"  - Issue #{get_issue_iid(issue)}: {issue.get('title', 'Unknown')}")
+            for idx, issue in enumerate(issues_to_implement, 1):
+                iid = get_issue_iid(issue)
+                title = issue.get('title', 'Unknown')
+                print(f"  {idx}. Issue #{iid}: {title}")
 
             # Implement each issue
+            print(f"\n[WORKFLOW] Starting issue implementation loop")
             for idx, issue in enumerate(issues_to_implement, 1):
                 issue_iid = get_issue_iid(issue)
+                issue_title = issue.get('title', 'Unknown')
 
                 # Skip if already completed
                 if any((get_issue_iid(c) if isinstance(c, dict) else c) == issue_iid
                        for c in self.issue_manager.completed_issues):
                     print(f"\n[SKIP] Issue #{issue_iid} already completed in previous run")
+                    print(f"[DEBUG] Skipping to next issue")
                     continue
 
-                print(f"\n[PROGRESS] {idx}/{len(issues_to_implement)}")
+                print(f"\n{'='*60}")
+                print(f"[WORKFLOW] [{idx}/{len(issues_to_implement)}] Processing Issue #{issue_iid}")
+                print(f"{'='*60}")
+                print(f"[DEBUG] Issue title: {issue_title}")
+                print(f"[DEBUG] Issue state: {issue.get('state', 'unknown')}")
+                print(f"\n[WORKFLOW] Step 9.{idx}: Checking completion status for Issue #{issue_iid}")
 
                 # Use retry logic for resilience
                 success = await self.implement_issue(issue)
 
                 if success:
                     # Already tracked in implement_issue
-                    print(f"[SUCCESS] [OK] Issue #{issue_iid} completed successfully")
+                    print(f"\n[WORKFLOW] [OK] Issue #{issue_iid} completed successfully")
+                    print(f"[DEBUG] Completed issues so far: {len(self.issue_manager.completed_issues)}")
                 else:
+                    print(f"\n[WORKFLOW] [FAILED] Issue #{issue_iid} FAILED after retries")
                     self.issue_manager.track_failed_issue(issue)
+                    print(f"[DEBUG] Failed issues so far: {len(self.issue_manager.failed_issues)}")
 
                 # Brief pause between issues
                 if idx < len(issues_to_implement):
-                    print("\n[PAUSE] 3 seconds between issues...")
+                    print(f"\n[WORKFLOW] Pausing 3 seconds before next issue...")
+                    print(f"[DEBUG] Next: Issue #{get_issue_iid(issues_to_implement[idx])} ({idx+1}/{len(issues_to_implement)})")
                     await asyncio.sleep(3)
 
         # Final state and summary

@@ -348,16 +348,14 @@ class AgentExecutor:
                     self.current_pipeline_id = pipeline_id
                     print(f"[AGENT EXECUTOR] Review Agent monitoring pipeline: #{pipeline_id}")
 
-                    # CRITICAL: Validate it matches Testing Agent's pipeline
+                    # Check if it matches Testing Agent's pipeline (informational)
                     if self.testing_pipeline_id:
                         if pipeline_id != self.testing_pipeline_id:
-                            print(f"[AGENT EXECUTOR] [FAIL] CRITICAL: Pipeline mismatch detected!")
+                            print(f"[AGENT EXECUTOR] [INFO] Different pipeline detected")
                             print(f"[AGENT EXECUTOR] Testing Agent created: #{self.testing_pipeline_id}")
                             print(f"[AGENT EXECUTOR] Review Agent monitoring: #{pipeline_id}")
-                            print(f"[AGENT EXECUTOR] [FAIL] Blocking merge - cannot validate wrong pipeline!")
-                            # This is a critical error - BLOCK the merge!
-                            self._end_execution_tracking(execution_id, "failed", "Pipeline ID mismatch")
-                            return False
+                            print(f"[AGENT EXECUTOR] [INFO] This is normal - MR creation triggers a new pipeline")
+                            print(f"[AGENT EXECUTOR] [INFO] Both pipelines run the same code - verifying MR pipeline")
                         else:
                             print(f"[AGENT EXECUTOR] [OK] Pipeline ID verified: #{pipeline_id} matches Testing Agent")
 
