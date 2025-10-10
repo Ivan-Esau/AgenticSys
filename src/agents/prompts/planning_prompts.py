@@ -170,11 +170,14 @@ PHASE 3: ARCHITECTURAL ANALYSIS
 Analyze issues to determine:
 
 1. **User Interface Type** (look in issue descriptions):
-   - Keywords: "command line", "console", "CLI" → type: "CLI"
-   - Keywords: "GUI", "window", "Swing", "JavaFX" → type: "GUI"
-   - Keywords: "web", "browser", "HTTP" → type: "Web"
-   - Keywords: "API", "endpoint", "REST" → type: "REST_API"
-   - Default: "CLI" if unclear
+   - Keywords: "GUI", "window", "Swing", "JavaFX", "desktop" → type: "GUI"
+   - Keywords: "web", "browser", "HTTP", "HTML", "frontend" → type: "Web"
+   - Keywords: "API", "endpoint", "REST", "GraphQL" → type: "REST_API"
+   - Keywords: "command line", "console", "terminal" → type: "CLI" (only if explicitly stated)
+
+   🚨 PRIORITY ORDER: GUI > Web > REST_API > CLI
+   ❌ NEVER default to CLI unless explicitly required in issues
+   ✅ Default: "GUI" if unclear (most user-friendly option)
 
 2. **Core Entities** (extract nouns from issue titles/descriptions):
    - Issue: "Create Game board" → Entity: "Board"
@@ -455,21 +458,25 @@ Planning Agent does NOT create implementation files, source code, or tests.
 
 PLANNING DOCUMENTS TO CREATE:
 
+🚨 ALL THREE DOCUMENTS ARE REQUIRED:
+
 ✅ docs/ORCH_PLAN.json (REQUIRED)
    • Complete implementation order
    • Dependencies mapping
    • Tech stack decisions
    • Architecture analysis
 
-✅ docs/README.md (OPTIONAL)
+✅ docs/README.md (REQUIRED)
    • High-level project overview
    • Architecture decisions summary
    • Link to ORCH_PLAN.json
+   • Setup and run instructions placeholder
 
-✅ docs/ARCHITECTURE.md (OPTIONAL)
+✅ docs/ARCHITECTURE.md (REQUIRED)
    • Detailed architecture decisions
    • Structure rationale
    • Alternative approaches considered
+   • Design patterns and principles
 
 ❌ PLANNING AGENT DOES NOT CREATE:
 • src/ directory or ANY source code files
@@ -486,7 +493,7 @@ REASONING:
 
 Commit Strategy:
 • Single commit: "feat: add project planning and implementation order"
-• Include ONLY docs/ORCH_PLAN.json and optional planning docs
+• Include ALL THREE required docs: ORCH_PLAN.json, README.md, ARCHITECTURE.md
 • Use proper commit message format
 
 CRITICAL: DO NOT CREATE .gitlab-ci.yml
@@ -506,8 +513,10 @@ Verify ALL of the following:
 
 2. Planning documentation verification:
    ✅ Use get_repo_tree(path="docs", ref="master") to verify planning docs created
-   ✅ Confirm docs/ORCH_PLAN.json exists
-   ✅ Optional: Confirm docs/README.md or docs/ARCHITECTURE.md if created
+   ✅ REQUIRED: Confirm docs/ORCH_PLAN.json exists
+   ✅ REQUIRED: Confirm docs/README.md exists
+   ✅ REQUIRED: Confirm docs/ARCHITECTURE.md exists
+   🚨 ALL THREE documents are mandatory - planning is incomplete without them
    ❌ DO NOT check for src/ or tests/ directories (not Planning Agent's job)
    ❌ DO NOT check for dependency files (not Planning Agent's job)
 

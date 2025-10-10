@@ -395,18 +395,38 @@ class PlanningManager:
                 try:
                     plan_json = json.loads(file_content)
 
+                    # Debug: Print the structure
+                    print(f"[PLANNING] [DEBUG] Loaded JSON structure keys: {list(plan_json.keys())}")
+
                     # Validate it has the required structure
                     if 'implementation_order' in plan_json:
                         self.current_plan = plan_json
-                        print(f"[PLANNING] [OK] Loaded ORCH_PLAN.json with {len(plan_json.get('implementation_order', []))} issues")
-                        print(f"[PLANNING] Implementation order: {plan_json.get('implementation_order', [])}")
+                        impl_order = plan_json.get('implementation_order', [])
+                        print(f"[PLANNING] [OK] Loaded ORCH_PLAN.json with {len(impl_order)} issues")
+                        print(f"[PLANNING] Implementation order: {impl_order}")
                         return True
                     else:
+                        # Try to find implementation_order nested in the structure
+                        print("[PLANNING] [WARNING] 'implementation_order' not found at root level")
+                        print(f"[PLANNING] [DEBUG] Available keys: {list(plan_json.keys())}")
+
+                        # Check if it's nested under another key
+                        for key, value in plan_json.items():
+                            if isinstance(value, dict) and 'implementation_order' in value:
+                                print(f"[PLANNING] [INFO] Found 'implementation_order' nested under '{key}'")
+                                self.current_plan = value
+                                impl_order = value.get('implementation_order', [])
+                                print(f"[PLANNING] [OK] Loaded nested ORCH_PLAN.json with {len(impl_order)} issues")
+                                print(f"[PLANNING] Implementation order: {impl_order}")
+                                return True
+
                         print("[PLANNING] [WARNING] ORCH_PLAN.json missing 'implementation_order' field")
+                        print(f"[PLANNING] [DEBUG] Full JSON preview: {str(plan_json)[:500]}...")
                         return False
 
                 except json.JSONDecodeError as e:
                     print(f"[PLANNING] [WARNING] Failed to parse ORCH_PLAN.json: {e}")
+                    print(f"[PLANNING] [DEBUG] File content preview: {file_content[:500]}...")
                     return False
             else:
                 print("[PLANNING] [WARNING] ORCH_PLAN.json not found in repository")

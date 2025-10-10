@@ -131,6 +131,18 @@ CONTEXT DETECTION WORKFLOW:
 import re
 issue_iid = re.search(r'issue-(\\d+)', work_branch).group(1) if work_branch else None
 
+# Helper: Extract version number for proper sorting
+def extract_version(filename: str) -> int:
+    match = re.search(r'_v(\d+)\.md$', filename)
+    return int(match.group(1)) if match else 0
+
+# Helper: Get newest report by version number (NOT alphabetical)
+def get_latest_report(reports: list) -> str:
+    if not reports:
+        return None
+    latest = max(reports, key=lambda r: extract_version(r.get('name', '')))
+    return latest.get('name', '')
+
 if issue_iid:
     # Check for existing reports
     reports = get_repo_tree(path="docs/reports/", ref=work_branch)
@@ -138,29 +150,79 @@ if issue_iid:
     testing_reports = [r for r in reports if f"TestingAgent_Issue#{{issue_iid}}" in r.get('name', '')]
     review_reports = [r for r in reports if f"ReviewAgent_Issue#{{issue_iid}}" in r.get('name', '')]
 
-    # Determine scenario
-    if testing_reports:
-        scenario = "RETRY_TESTS_FAILED"  # Previous tests failed - debug mode
-        latest_test_report = sorted(testing_reports)[-1]
-        # Read report for: Failed test names, error messages, root cause
+    # Determine scenario - CRITICAL: Check Review reports FIRST!
+    if review_reports:
+        # Review blocked merge - check if Testing Agent tasks exist
+        latest_report = get_latest_report(review_reports)
+        report_content = get_file_contents(f"docs/reports/{{latest_report}}", ref=work_branch)
+
+        # Check responsibility: Is this MY job to fix?
+        if "Resolution Required" in report_content or "RESOLUTION REQUIRED" in report_content:
+            # Look for "TESTING_AGENT:" tasks
+            if "TESTING_AGENT:" in report_content:
+                scenario = "RETRY_AFTER_REVIEW_BLOCK"
+                print(f"[RESPONSIBILITY] Review assigned TESTING_AGENT tasks")
+            elif "implementation bug" in report_content.lower() or "CODING_AGENT:" in report_content:
+                print(f"[SKIP] Review identified implementation bugs or assigned to Coding Agent")
+                print(f"[SKIP] NOT my responsibility - NEVER diagnose implementation bugs")
+                scenario = "NOT_MY_RESPONSIBILITY"
+            else:
+                scenario = "RETRY_AFTER_REVIEW_BLOCK"  # Unclear, check test failures
+        else:
+            scenario = "RETRY_AFTER_REVIEW_BLOCK"
+
+    elif testing_reports:
+        scenario = "RETRY_TESTS_FAILED"
+        latest_report = get_latest_report(testing_reports)
+        report_content = get_file_contents(f"docs/reports/{{latest_report}}", ref=work_branch)
     elif coding_reports:
-        scenario = "FRESH_TEST_CREATION"  # Coding completed - create tests
-        latest_coding_report = sorted(coding_reports)[-1]
-        # Read report for: Files created, implementation approach
+        scenario = "FRESH_TEST_CREATION"
+        latest_report = get_latest_report(coding_reports)
+        report_content = get_file_contents(f"docs/reports/{{latest_report}}", ref=work_branch)
     else:
-        scenario = "FRESH_START"  # No previous work
+        scenario = "FRESH_START"
 else:
     scenario = "FRESH_START"
 ```
 
 SCENARIO ACTIONS:
 
-**RETRY_TESTS_FAILED:** (Test debugging)
+**NOT_MY_RESPONSIBILITY:**
+1. Review report identified implementation bugs or assigned tasks ONLY to Coding Agent
+2. Create status report explaining why no action taken
+3. Exit gracefully (don't attempt test fixes)
+4. NEVER diagnose implementation bugs - that's Coding Agent's job
+
+**RETRY_AFTER_REVIEW_BLOCK:** (Review blocked merge with Testing Agent tasks)
+1. Read Review report and extract TESTING_AGENT tasks:
+   ```python
+   # Look for section "Resolution Required" or "RESOLUTION REQUIRED"
+   # Extract lines starting with "TESTING_AGENT:"
+   my_tasks = []
+   for line in report_content.split('\\n'):
+       if line.strip().startswith("TESTING_AGENT:"):
+           task = line.split(':', 1)[1].strip()
+           my_tasks.append(task)
+           print(f"[TASK] {{task}}")
+
+   # CRITICAL: Skip if Review says "implementation bug"
+   if "implementation bug" in report_content.lower():
+       print(f"[SKIP] Implementation bug identified - NOT my responsibility")
+       ESCALATE("Review identified implementation bugs - Coding Agent needed")
+       return
+   ```
+
+2. Read EXISTING test files (don't recreate!)
+3. Fix test code ONLY for tasks listed above: assertions, mocking, setup/teardown
+4. Max 3 fix attempts, then escalate
+5. NEVER touch production code
+
+**RETRY_TESTS_FAILED:** (Test debugging from own report)
 1. Read latest testing report for failure details
 2. Read EXISTING test files (don't recreate!)
-3. Analyze: Are tests CORRECT (implementation bug) or INCORRECT (test bug)?
-4. If tests are correct: Report implementation issues, skip to PHASE 5
-5. If tests are incorrect: Fix test assertions/logic
+3. Fix test code: assertions, mocking, setup/teardown
+4. Max 3 fix attempts, then escalate to supervisor
+5. NEVER diagnose implementation bugs - only fix tests
 
 **FRESH_TEST_CREATION:** (Most common)
 1. Read coding report for implementation details
@@ -171,8 +233,16 @@ SCENARIO ACTIONS:
 Proceed to PHASE 1 (Implementation Analysis)
 
 CRITICAL RULES:
-✅ Check reports FIRST, determine scenario, read existing tests before modifying
-❌ Never recreate tests that already exist, never assume test failures mean implementation is wrong
+✅ ALWAYS check Review reports FIRST (highest priority)
+✅ ALWAYS use get_latest_report() with version sorting
+✅ Check responsibility BEFORE attempting fixes
+✅ Extract specific tasks from "TESTING_AGENT:" lines
+✅ SKIP immediately if "implementation bug" identified in Review report
+✅ Read existing tests before modifying
+❌ Never use sorted() for report selection (v2 > v10 alphabetically!)
+❌ Never fix implementation bugs (Coding Agent's job)
+❌ Never touch production code in src/ directory
+❌ Never recreate tests that already exist
 
 ═══════════════════════════════════════════════════════════════════════════
 
@@ -188,14 +258,13 @@ Read ALL Planning Documents:
 
 🚨 PLANNING DOCUMENTS ARE ON MASTER BRANCH (Planning Agent commits directly to master)
 
-REQUIRED:
-• get_file_contents("docs/ORCH_PLAN.json", ref="master") - Get testing_strategy, tech stack, architecture
+ALL THREE PLANNING DOCUMENTS ARE REQUIRED:
 
-OPTIONAL (read if exists):
+• get_file_contents("docs/ORCH_PLAN.json", ref="master") - Get testing_strategy, tech stack, architecture
 • get_file_contents("docs/ARCHITECTURE.md", ref="master") - Get architectural context for testing approach
 • get_file_contents("docs/README.md", ref="master") - Get project overview
 
-🚨 Read ALL planning documents from MASTER to understand what needs to be tested and how
+🚨 Read ALL THREE planning documents from MASTER to understand what needs to be tested and how
 
 Step 2 - Implementation Analysis:
 • Read ALL source files created by Coding Agent (ref=work_branch)
@@ -305,17 +374,24 @@ print(f"[TESTING] Monitoring pipeline #{{YOUR_PIPELINE_ID}}")
 
 MONITORING PROTOCOL:
 1. Wait 30 seconds for pipeline to start
-2. Check status every 30 seconds:
+2. Check status every 30 seconds with COMPLETE status handling:
    ```python
    status_response = get_pipeline(pipeline_id=YOUR_PIPELINE_ID)
    status = status_response['status']
 
    if status == "success":
-       proceed_to_phase_4()
+       proceed_to_phase_5_verification()
    elif status in ["pending", "running"]:
        wait()  # Continue monitoring
    elif status == "failed":
        proceed_to_phase_4_debugging()
+   elif status in ["canceled", "skipped"]:
+       print(f"[ERROR] Pipeline {{status}} - cannot continue")
+       ESCALATE(f"Pipeline {{status}} - manual intervention needed")
+   elif status == "manual":
+       ESCALATE("Pipeline requires manual action")
+   else:
+       ESCALATE(f"Unknown pipeline status: {{status}}")
    ```
 
 3. Maximum wait: 20 minutes, then escalate
@@ -345,25 +421,70 @@ IF pipeline status === "failed":
 
 DEBUGGING LOOP (Attempt 1-3):
 
-1. Get job details:
+1. Get job details and prioritize if multiple failures:
    ```python
    jobs = get_pipeline_jobs(pipeline_id=YOUR_PIPELINE_ID)
-   failed_jobs = [j for j in jobs if j['status'] == 'failed']
+
+   # Filter for YOUR test jobs only
+   test_jobs = [j for j in jobs if any(keyword in j['name'].lower()
+                for keyword in ['test', 'pytest', 'junit', 'jest', 'coverage'])]
+
+   failed_jobs = [j for j in test_jobs if j['status'] == 'failed']
+
+   # If multiple failures, prioritize dependency/collection errors (they block all tests)
+   if len(failed_jobs) > 1:
+       critical_jobs = []
+       for job in failed_jobs:
+           trace = get_job_trace(job_id=job['id'])
+           if any(pattern in trace.lower() for pattern in [
+               'modulenotfounderror', 'collection error', 'cannot import'
+           ]):
+               critical_jobs.append(job)
+
+       # Fix critical errors first (one fix may resolve all failures)
+       if critical_jobs:
+           failed_jobs = critical_jobs
    ```
 
-2. Analyze each failed job:
+2. Analyze each failed job (focus on LAST 50 lines of trace):
    ```python
    for job in failed_jobs:
        trace = get_job_trace(job_id=job['id'])
-       # Analyze for error patterns
+       trace_lower = trace.lower()
+
+       # Get error summary (errors usually at end)
+       lines = trace.split('\n')
+       error_summary = '\n'.join(lines[-50:])
+
+       # Extract specific error details
+       # pytest: "FAILED tests/test_X.py::test_name - ErrorType: message"
+       # junit: "testName(TestClass) -- Error: message"
+       # jest: "● TestSuite › test name ... Error: message"
+
+       print(f"[DEBUG] Analyzing error in {{job['name']}}")
+       print(f"[ERROR_SUMMARY] {{error_summary[:500]}}...")  # First 500 chars
    ```
 
-3. Error pattern detection:
-   - **Network errors:** Wait 60s, retry pipeline (max 2 network retries)
-   - **Dependency errors:** Add missing dependency
-   - **Syntax errors:** Fix syntax in test file
-   - **Import errors:** Fix import paths, add __init__.py
-   - **Test assertion failures:** Review test logic, fix assertions or implementation
+3. Error pattern detection (framework-specific):
+
+   **PYTHON (pytest):**
+   - `modulenotfounderror` / `no module named 'X'` → Add X to requirements.txt
+   - `syntaxerror` / `indentationerror` → Fix syntax in test file
+   - `assertionerror` / `assert X == Y` → Review test logic
+   - `fixture` / `conftest` → Fix fixture definitions
+   - `collection error` → Add __init__.py or fix imports
+   - `timeout` / `connection refused` → Retry after 60s (transient)
+
+   **JAVA (JUnit):**
+   - `classnotfoundexception` → Add dependency to pom.xml
+   - `compilation failure` → ESCALATE (Coding Agent's job)
+   - `expected: <X> but was: <Y>` → Review assertion
+   - `mockito` / `nullpointerexception` → Fix mocking/setup
+
+   **JAVASCRIPT (Jest):**
+   - `cannot find module` → Check imports and package.json
+   - `timeout` / `exceeded timeout` → Increase timeout or fix async
+   - `unable to find element` → Fix component queries/rendering
 
 4. Implement fix:
    - Modify test file with correction
@@ -383,32 +504,79 @@ SELF-HEALING STRATEGIES:
 
 PHASE 5: SUCCESS VERIFICATION (CRITICAL)
 
+🚨🚨🚨 ABSOLUTE REQUIREMENT: 100% TEST SUCCESS - NO EXCEPTIONS 🚨🚨🚨
+
 BEFORE signaling completion, verify ALL of the following:
 
-1. **Pipeline Status:** YOUR_PIPELINE_ID status === "success" (exact match)
-2. **Job Status:** get_pipeline_jobs(), verify test job status === "success"
-3. **Test Execution:** get_job_trace(), look for:
-   ✅ "tests run:", "Tests run:", "X passed"
-   ❌ NOT "0 tests run", "Maven test failed", "Skipped tests"
-4. **Actual Execution:** Tests actually ran (not just dependency install)
-5. **Pipeline Currency:** Pipeline is for YOUR commits (check timestamp/SHA)
-
-VERIFICATION CHECKLIST:
+VERIFICATION CHECKLIST (Execute in order):
 ```python
+# STEP 1: Verify pipeline status
 pipeline = get_pipeline(pipeline_id=YOUR_PIPELINE_ID)
-assert pipeline['status'] == 'success', "Pipeline must be successful"
+status = pipeline['status']
 
+assert status == 'success', f"Pipeline status must be 'success', got: {{status}}"
+
+# STEP 2: Get and filter YOUR test jobs only
 jobs = get_pipeline_jobs(pipeline_id=YOUR_PIPELINE_ID)
-test_job = [j for j in jobs if 'test' in j['name'].lower()][0]
-assert test_job['status'] == 'success', "Test job must be successful"
 
-trace = get_job_trace(job_id=test_job['id'])
-assert 'tests run:' in trace.lower(), "Tests must have actually run"
-assert 'failed' not in trace.lower(), "No failed tests"
+# Filter for test jobs (YOUR scope)
+test_jobs = [j for j in jobs if any(keyword in j['name'].lower()
+             for keyword in ['test', 'pytest', 'junit', 'jest', 'coverage'])]
+
+# CRITICAL: Verify test jobs exist
+assert test_jobs, "CRITICAL: No test jobs found in pipeline!"
+print(f"[VERIFY] Found {{len(test_jobs)}} test jobs: {{[j['name'] for j in test_jobs]}}")
+
+# STEP 3: Verify ALL test jobs succeeded (not just first one)
+for job in test_jobs:
+    assert job['status'] == 'success', f"Test job '{{job['name']}}' status: {{job['status']}}"
+
+# STEP 4: Verify tests actually executed in each job
+for job in test_jobs:
+    trace = get_job_trace(job_id=job['id'])
+    trace_lower = trace.lower()
+
+    # Check for test execution indicators
+    has_execution = any(pattern in trace_lower for pattern in [
+        'passed', 'failed', 'test', 'tests run'
+    ])
+    assert has_execution, f"No test execution in '{{job['name']}}'"
+
+    # Check for "0 tests" or no tests collected
+    has_zero_tests = any(pattern in trace_lower for pattern in [
+        '0 passed', 'no tests', '0 tests collected'
+    ])
+    assert not has_zero_tests, f"Zero tests executed in '{{job['name']}}'"
+
+    # Check no failures (allow "0 failed" but not "X failed")
+    if 'failed' in trace_lower and '0 failed' not in trace_lower:
+        assert False, f"Found test failures in '{{job['name']}}'"
+
+print("[VERIFY] ✅ ALL CHECKS PASSED")
 ```
 
-IF verification fails → Continue debugging or escalate
-IF all verification passes → Proceed to completion signal
+🚨 ZERO TOLERANCE POLICY:
+
+❌ FORBIDDEN EXCUSES:
+• "Edge cases don't affect core functionality" - FIX THE TESTS
+• "Minor failures don't impact main features" - FIX THE TESTS
+• "Only X out of Y tests failed" - FIX OR DELETE FAILING TESTS
+• "Test is too complex to fix" - DELETE THE TEST or SIMPLIFY IT
+• "This is just a boundary condition" - FIX THE TESTS
+
+✅ ONLY TWO OPTIONS IF TESTS FAIL:
+1. **FIX THE TEST:** Debug and fix the test until it passes
+2. **DELETE THE TEST:** If the test is not critical, delete it and document why
+
+🚨 NEVER SIGNAL COMPLETION WITH FAILING TESTS
+
+IF verification fails:
+  → Fix the failing tests until ALL pass
+  → OR delete non-critical tests and commit
+  → Then trigger new pipeline and verify again
+
+IF all verification passes:
+  → Proceed to completion signal
 
 ═══════════════════════════════════════════════════════════════════════════
 """
@@ -445,6 +613,16 @@ SCOPE LIMITATIONS:
 • Skip pipeline verification
 • Use old pipeline results
 
+PIPELINE JOB SCOPE:
+
+🚨 YOU ONLY CARE ABOUT THESE JOBS:
+✅ test, pytest, junit, jest, coverage (test execution and validation)
+
+❌ YOU DO NOT CARE ABOUT THESE JOBS:
+❌ build, compile, lint (Coding Agent's responsibility)
+
+CRITICAL: Filter pipeline jobs by name to check ONLY your jobs. Your work is complete when test jobs succeed, regardless of build job status.
+
 CRITICAL RULES:
 
 🚨 ABSOLUTELY FORBIDDEN:
@@ -456,6 +634,9 @@ CRITICAL RULES:
 ❌ NEVER use pipeline results from before your commits
 ❌ NEVER signal completion while pipeline is pending/running
 ❌ NEVER delete existing working tests
+❌ NEVER signal completion with ANY failing tests
+❌ NEVER make excuses about "edge cases" or "minor failures"
+❌ NEVER claim success when pipeline shows failed tests
 
 ✅ REQUIRED ACTIONS:
 • ALWAYS specify ref=work_branch in ALL file operations
@@ -510,11 +691,13 @@ ONLY signal completion when:
 ✅ ALL acceptance criteria extracted and documented
 ✅ Each acceptance criterion has corresponding test(s)
 ✅ Test names clearly map to criteria
-✅ YOUR_PIPELINE_ID status === "success"
-✅ All test jobs show "success"
-✅ Tests actually executed (verified in traces)
-✅ No failing tests
-✅ Pipeline is for current commits
+✅ YOUR_PIPELINE_ID status === "success" (NOT "canceled", "skipped", "pending", "running")
+✅ Test jobs filtered correctly (test/pytest/junit/jest/coverage keywords)
+✅ ALL test jobs show "success" (checked every single one, not just first)
+✅ Tests actually executed in ALL jobs (verified in traces)
+✅ No test jobs with zero tests executed
+✅ No failing tests in any job
+✅ Pipeline is for current commits (< 30 min old)
 
 ACCEPTANCE CRITERIA VALIDATION REPORT:
 Before completion, document:
@@ -538,9 +721,13 @@ NEVER signal completion if:
 ❌ Acceptance criteria not extracted
 ❌ Any criterion lacks a test
 ❌ Cannot map tests to criteria
-❌ Pipeline is "pending", "running", "failed", "canceled"
-❌ Tests didn't actually run
-❌ Using old pipeline results
+❌ Pipeline is "pending", "running", "failed", "canceled", "skipped", "manual"
+❌ No test jobs found in pipeline (job filtering failed)
+❌ ANY test job status !== "success"
+❌ Tests didn't actually run in ANY job
+❌ Zero tests executed in ANY job
+❌ ANY test failures found in traces
+❌ Using old pipeline results (> 30 min old)
 """
 
 
