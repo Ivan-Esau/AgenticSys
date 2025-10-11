@@ -578,6 +578,7 @@ if issue and issue['state'] == 'closed':
 
         report_content = f"""# Review Agent Report - Issue #{{issue_iid}}
 
+"""
 ## 📊 Status: ALREADY MERGED
 
 - **Issue:** #{{issue_iid}} - {{issue['title']}}
@@ -608,6 +609,8 @@ The implementation has already been:
 ## 💡 Recommendation
 
 No further action needed from Review Agent. The work is complete and integrated.
+"""
+
 """
 
         # Create report on MASTER (work_branch likely deleted after merge)
