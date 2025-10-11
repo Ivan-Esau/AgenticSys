@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Review agent prompts - Enhanced with industry best practices.
 
@@ -544,7 +545,7 @@ if is_planning_branch:
     issue_iid = None
     issue = None
 else:
-    match = re.search(r'issue-(\\d+)', work_branch)
+    match = re.search(r'issue-(\d+)', work_branch)
     issue_iid = int(match.group(1)) if match else None
 
     if not issue_iid:
@@ -787,7 +788,7 @@ PHASE 2.5: COMPREHENSIVE REQUIREMENT & ACCEPTANCE CRITERIA VALIDATION (MANDATORY
 
 📋 VALIDATION STEPS:
 
-1. Extract issue IID: `re.search(r'issue-(\\\\d+)', work_branch)`
+1. Extract issue IID: `re.search(r'issue-(\d+)', work_branch)`
 2. Fetch issue: `get_issue(project_id, issue_iid)` → Parse "Anforderungen/Requirements" & "Akzeptanzkriterien/Acceptance Criteria"
 3. Validate requirements: For each requirement → Identify files → Read & verify implementation → Document
 4. Validate AC: For each criterion → Find test → Verify test exists & passed → Document
