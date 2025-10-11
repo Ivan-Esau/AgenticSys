@@ -57,7 +57,12 @@ class BaseAgent:
                 max_retries=Config.LLM_MAX_RETRIES,
                 provider=Config.LLM_PROVIDER
             )
-        
+            # Debug: Show actual LLM config being used
+            print(f"[{name.upper()}] LLM Config:")
+            print(f"  Provider: {Config.LLM_PROVIDER}")
+            print(f"  Model: {Config.LLM_MODEL}")
+            print(f"  Temperature: {Config.LLM_TEMPERATURE}")
+
         # Create the LangGraph ReAct agent
         # Use system_prompt as the state modifier in agent creation
         from langgraph.prebuilt.chat_agent_executor import create_react_agent

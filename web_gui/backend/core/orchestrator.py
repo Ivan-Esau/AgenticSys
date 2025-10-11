@@ -138,11 +138,70 @@ class SystemOrchestrator:
             "info"
         )
 
-        # Prepare LLM configuration for analytics
+        # ===================================================================
+        # FIX: Extract LLM config from nested structure sent by frontend
+        # Frontend sends: config['llm_config'] = {provider, model, temperature}
+        # NOT flat structure: config['llm_provider'], config['llm_model'], etc.
+        # ===================================================================
+        llm_config_from_gui = config.get('llm_config', {})
+
+        # Extract with fallback to environment variables
+        llm_provider = llm_config_from_gui.get('provider', os.getenv('LLM_PROVIDER', 'deepseek'))
+        llm_model = llm_config_from_gui.get('model', os.getenv('LLM_MODEL', 'deepseek-chat'))
+        llm_temperature = llm_config_from_gui.get('temperature', float(os.getenv('LLM_TEMPERATURE', '0.7')))
+
+        # Debug logging with prominent banner
+        print("\n" + "="*70)
+        print("[LLM CONFIG] Applying GUI selections:")
+        print("="*70)
+        print(f"  Provider: {llm_provider}")
+        print(f"  Model: {llm_model}")
+        print(f"  Temperature: {llm_temperature}")
+        print("="*70 + "\n")
+
+        # ===================================================================
+        # FIX: Update environment variables BEFORE supervisor initialization
+        # This allows Config class to pick up GUI selections instead of .env
+        # ===================================================================
+        if llm_provider:
+            os.environ['LLM_PROVIDER'] = str(llm_provider)
+            print(f"[LLM CONFIG] Set LLM_PROVIDER={llm_provider}")
+
+        if llm_model:
+            os.environ['LLM_MODEL'] = str(llm_model)
+            print(f"[LLM CONFIG] Set LLM_MODEL={llm_model}")
+
+        if llm_temperature is not None:
+            os.environ['LLM_TEMPERATURE'] = str(llm_temperature)
+            print(f"[LLM CONFIG] Set LLM_TEMPERATURE={llm_temperature}")
+
+        # ===================================================================
+        # CRITICAL FIX: Directly update Config class variables
+        # importlib.reload() doesn't affect modules that already imported Config
+        # (base_agent.py has: from src.core.llm.config import Config)
+        # So we must update the Config class variables directly!
+        # ===================================================================
+        from src.core.llm.config import Config
+
+        if llm_provider:
+            Config.LLM_PROVIDER = llm_provider
+            print(f"[LLM CONFIG] Updated Config.LLM_PROVIDER={llm_provider}")
+
+        if llm_model:
+            Config.LLM_MODEL = llm_model
+            print(f"[LLM CONFIG] Updated Config.LLM_MODEL={llm_model}")
+
+        if llm_temperature is not None:
+            Config.LLM_TEMPERATURE = llm_temperature
+            print(f"[LLM CONFIG] Updated Config.LLM_TEMPERATURE={llm_temperature}")
+
+        print(f"\n[LLM CONFIG] Config class updated - agents will use GUI selections\n")
+
+        # Prepare LLM configuration for analytics (using extracted values)
         llm_config = {
-            'provider': config.get('llm_provider', 'unknown'),
-            'model': config.get('llm_model', 'unknown'),
-            'temperature': config.get('llm_temperature', 0.0)
+            'provider': llm_provider,
+            'model': llm_model,
+            'temperature': llm_temperature
         }
 
         # Create MCP log callback for WebSocket integration
