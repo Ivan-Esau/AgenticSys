@@ -26,11 +26,9 @@ def get_mr_creation_best_practices() -> str:
         MR creation guidelines with concrete examples
     """
     return """
-═══════════════════════════════════════════════════════════════════════════
-                    MERGE REQUEST CREATION BEST PRACTICES
-═══════════════════════════════════════════════════════════════════════════
+## MERGE REQUEST CREATION BEST PRACTICES
 
-MR TITLE CONVENTIONS:
+**MR TITLE CONVENTIONS:**
 
 Format: "{{{{type}}}}: {{{{description}}}} (#{{{{issue_iid}}}})"
 
@@ -82,43 +80,7 @@ Closes #{{{{issue_iid}}}}
 - [x] Pipeline successful
 ```
 
-CONCRETE EXAMPLE:
-
-Title: "feat: implement project CRUD operations (#3)"
-
-Description:
-```markdown
-## Summary
-Implemented full CRUD operations for projects with validation, error handling, and database integration.
-
-## Changes
-- Added data models with validation (Pydantic/DTOs)
-- Implemented 5 endpoints: POST, GET (list), GET (single), PUT, DELETE
-- Added database schema migration
-- Integrated with ORM for data persistence
-
-## Implementation Details
-- Input validation with constraints (min_length, max_length)
-- Proper HTTP status codes (201 create, 404 not found, 204 delete)
-- Type hints and docstrings throughout
-
-## Testing
-- Unit tests: 15 tests covering success/failure scenarios
-- Integration tests: Database integration with fixtures
-- Validation tests: Edge cases (empty strings, max length)
-- Pipeline status: ✅ Success (100% pass rate, 95% coverage)
-
-## Related Issues
-Closes #3
-
-## Checklist
-- [x] Implementation complete
-- [x] Tests added and passing
-- [x] Code follows project standards
-- [x] Pipeline successful
-```
-
-ISSUE AUTO-LINKING:
+**ISSUE AUTO-LINKING:**
 
 MANDATORY: Include "Closes #X" in MR description
 ✅ "Closes #123" → Issue will auto-close on merge
@@ -159,11 +121,9 @@ def get_pipeline_verification_protocol() -> str:
         Pipeline verification guidelines with YOUR_PIPELINE_ID tracking
     """
     return """
-═══════════════════════════════════════════════════════════════════════════
-                STRICT PIPELINE VERIFICATION PROTOCOL
-═══════════════════════════════════════════════════════════════════════════
+## STRICT PIPELINE VERIFICATION PROTOCOL
 
-🚨🚨🚨 ABSOLUTE REQUIREMENT: 100% PIPELINE SUCCESS - NO EXCEPTIONS 🚨🚨🚨
+🚨 ABSOLUTE REQUIREMENT: 100% PIPELINE SUCCESS - NO EXCEPTIONS
 
 CRITICAL: This is the MOST IMPORTANT part of Review Agent's job.
 Pipeline verification MUST be done correctly to prevent broken code in master.
@@ -331,11 +291,9 @@ def get_merge_safety_protocols() -> str:
         Merge safety guidelines with decision flowchart
     """
     return """
-═══════════════════════════════════════════════════════════════════════════
-                        MERGE SAFETY PROTOCOLS
-═══════════════════════════════════════════════════════════════════════════
+## MERGE SAFETY PROTOCOLS
 
-CRITICAL MERGE DECISION FLOW:
+**CRITICAL MERGE DECISION FLOW:**
 
 1. Verify Pipeline Status (YOUR_PIPELINE_ID) → success? YES → Continue | NO → WAIT or ESCALATE
 2. Verify MR Ready (no conflicts, discussions resolved, branch up to date)
@@ -512,15 +470,13 @@ def get_review_workflow(tech_stack_info: str, pipeline_info: str) -> str:
         Review workflow prompt section
     """
     return f"""
-═══════════════════════════════════════════════════════════════════════════
-                    REVIEW AGENT WORKFLOW
-═══════════════════════════════════════════════════════════════════════════
+## REVIEW AGENT WORKFLOW
 
 {tech_stack_info}
 
 {pipeline_info}
 
-INTELLIGENT REVIEW WORKFLOW:
+**INTELLIGENT REVIEW WORKFLOW:**
 
 PHASE 1: CONTEXT GATHERING & MR MANAGEMENT
 
@@ -611,8 +567,63 @@ if issue and issue['state'] == 'closed':
 
     if mrs and len(mrs) > 0:
         # MR exists and is merged - truly done
-        print(f"[REVIEW] Branch already merged via MR !{{mrs[0]['iid']}}")
-        print("REVIEW_PHASE_COMPLETE: Issue already merged. No action needed.")
+        merged_mr = mrs[0]
+        print(f"[REVIEW] Branch already merged via MR !{{merged_mr['iid']}}")
+
+        # CRITICAL: Create status report BEFORE exiting
+        # Note: work_branch may be deleted, so create on master
+        report_version = 1  # First report for this run
+        report_path = f"docs/reports/ReviewAgent_Issue#{{issue_iid}}_Report_v{{report_version}}.md"
+
+        report_content = f"""# Review Agent Report - Issue #{{issue_iid}}
+
+## 📊 Status: ALREADY MERGED
+
+- **Issue:** #{{issue_iid}} - {{issue['title']}}
+- **MR:** !{{merged_mr['iid']}} - {{merged_mr['title']}}
+- **Merged At:** {{merged_mr.get('merged_at', 'N/A')}}
+- **Merged By:** {{merged_mr.get('merged_by', {{}}).get('username', 'N/A')}}
+- **Work Branch:** {{work_branch}}
+
+## 🔍 Analysis
+
+This issue was already completed and merged in a previous run or manually merged.
+
+**Verification Performed:**
+✅ MR exists: !{{merged_mr['iid']}}
+✅ MR state: merged
+✅ Issue state: closed
+✅ Branch was: {{work_branch}}
+
+## 🎯 Decision: NO ACTION REQUIRED
+
+The implementation has already been:
+- Reviewed and validated
+- Merged into master branch
+- Issue closed
+
+**Previous Pipeline:** The merge request was accepted after pipeline validation in a previous run.
+
+## 💡 Recommendation
+
+No further action needed from Review Agent. The work is complete and integrated.
+"""
+
+        # Create report on MASTER (work_branch likely deleted after merge)
+        try:
+            create_or_update_file(
+                project_id=project_id,
+                file_path=report_path,
+                content=report_content,
+                branch="master",  # work_branch deleted after previous merge
+                commit_message=f"docs: Add Review Agent status report for issue #{{issue_iid}} (already merged)"
+            )
+            print(f"[REVIEW] Status report created: {{report_path}}")
+        except Exception as e:
+            print(f"[REVIEW] [WARN] Could not create report (branch may not exist): {{e}}")
+
+        # Signal completion with MR reference
+        print(f"REVIEW_PHASE_COMPLETE: Issue #{{issue_iid}} already completed and merged via MR !{{merged_mr['iid']}}. Report: {{report_path}}")
         return
     else:
         # Issue closed but branch NOT merged
@@ -875,72 +886,14 @@ REPORT STRUCTURE:
 
 Create file: `logs/runs/{{{{run_id}}}}/issues/issue_{{{{issue_iid}}}}_final_report.md`
 
-Report Template (12 sections):
+**Report Template (12 sections):**
+
+Create file: `logs/runs/{{run_id}}/issues/issue_{{issue_iid}}_final_report.md`
 
 ```markdown
 # Issue #{{issue_iid}} - Final Implementation Report
 
-**Generated:** {{ISO timestamp}} | **Run ID:** {{run_id}} | **Status:** COMPLETED & MERGED ✅
-
-## 1. Executive Summary
-**Duration:** {{time}} | **Cycles:** {{count}} | **Pipeline Attempts:** {{count}} ({{success_rate}}%) | **Outcome:** Merged to master
-
-## 2. Implementation Cycles
-| Cycle | Agent | Outcome | Duration | Issues |
-|-------|-------|---------|----------|--------|
-| {{N}} | {{name}} | {{result}} | {{time}} | {{desc}} |
-
-**Agent Stats:** Coding: {{attempts}} ({{success}}/{{fail}}), Testing: {{attempts}} ({{success}}/{{fail}}), Review: {{attempts}}
-
-## 3. Pipeline Analysis
-**Pipelines:** {{total}} ({{success}} ✅, {{failed}} ❌) | **Final:** #{{id}} SUCCESS
-
-| Pipeline | Status | Triggered By | Duration | Notes |
-|----------|--------|--------------|----------|-------|
-| #{{id}}  | {{status}} | {{agent}} | {{time}} | {{desc}} |
-
-**Final Jobs:** test ({{status}}, {{time}}), build ({{status}}, {{time}}), lint ({{status}}, {{time}})
-
-## 4. Test Coverage
-**Final:** {{percent}}% (Δ {{change}}%) | **Tests:** {{total}} ({{new}} added) | **Execution:** {{time}}
-**Module Coverage:** {{module1}}: {{%}}, {{module2}}: {{%}}
-
-## 5. Agent Performance
-**Coding:** {{attempts}} attempts ({{avg_time}}), Challenges: {{desc}}
-**Testing:** {{attempts}} attempts ({{avg_time}}), Challenges: {{desc}}
-**Review:** Validation: {{req_count}}/{{total}} requirements, {{ac_count}}/{{total}} AC tested
-
-## 6. Error Log & Debugging
-**Total:** {{count}} cycles | **Time:** {{duration}}
-- Cycle {{N}}: {{Agent}} - {{Error}} → {{Root Cause}} → Fixed in {{cycles}} cycles
-
-## 7. Requirements & Acceptance Criteria
-**Requirements:** {{count}}/{{total}} (100%)
-✅ Req {{N}}: "{{text}}" → {{file:line}}
-
-**Acceptance Criteria:** {{count}}/{{total}} (100%)
-✅ AC {{N}}: "{{text}}" → Test: {{test_name}} ({{file:line}}) PASSED
-
-## 8. Project Impact
-**Before:** {{issues}} completed, {{coverage}}% coverage | **After:** {{issues+1}} completed, {{coverage}}% (Δ {{change}}%)
-**Changes:** {{files}} files, +{{add}}/-{{del}} lines, Coverage Δ{{change}}%
-
-## 9. MR Details
-**MR:** !{{iid}} "{{title}}" | **Branch:** {{source}} → master | **Merged:** {{time}} ({{duration}})
-**Commit:** {{sha}} | **Message:** "{{msg}}"
-
-## 10. Key Metrics
-Implementation: {{time}} | Cycles: {{count}} | Pipelines: {{count}} ({{%}}% success) | Coverage: {{%}}% | Tests: +{{count}} | Req/AC: {{count}}/{{total}}
-
-## 11. Lessons Learned
-**Successes:** {{observation1}}, {{observation2}}
-**Improvements:** {{area1}} → {{recommendation}}
-**Agent Recommendations:** Coding: {{rec}}, Testing: {{rec}}, Review: {{rec}}
-
-## 12. Appendix
-**GitLab:** Issue {{url}}, MR {{url}}, Pipeline {{url}}, Commit {{url}}
-**Logs:** agents/, pipelines/, issue_{{iid}}_metrics.json
-**Docs:** ORCH_PLAN.json, ARCHITECTURE.md, README.md
+**Sections:** 1. Executive Summary (duration, cycles, pipeline attempts, success rate, outcome) | 2. Implementation Cycles (table with agent attempts, outcomes, durations) | 3. Pipeline Analysis (total pipelines, final pipeline #, job statuses) | 4. Test Coverage (final %, delta, tests added, module breakdown) | 5. Agent Performance (attempts, avg time, challenges per agent) | 6. Error Log & Debugging (cycles, errors, root causes, resolution time) | 7. Requirements & Acceptance Criteria (all requirements verified with files/lines, all AC tested) | 8. Project Impact (issues completed before/after, coverage delta, file changes) | 9. MR Details (MR #, title, branch, merge time, commit SHA) | 10. Key Metrics (implementation time, cycle count, pipeline success %, coverage, tests added) | 11. Lessons Learned (successes, improvements, agent recommendations) | 12. Appendix (GitLab URLs, log paths, planning docs)
 ```
 
 DATA COLLECTION:
@@ -970,11 +923,9 @@ REPORT REQUIREMENTS:
 🚨 DO NOT use incomplete data
 🚨 DO NOT generate if merge failed
 
-{get_mr_creation_best_practices()}
+---
 
-{get_pipeline_verification_protocol()}
-
-{get_merge_safety_protocols()}
+**Note:** Follow MR creation best practices, pipeline verification protocol, and merge safety protocols defined in the base sections of this prompt throughout all phases.
 """
 
 
@@ -986,11 +937,9 @@ def get_review_constraints() -> str:
         Review constraints prompt section
     """
     return """
-═══════════════════════════════════════════════════════════════════════════
-                    REVIEW AGENT CONSTRAINTS
-═══════════════════════════════════════════════════════════════════════════
+## REVIEW AGENT CONSTRAINTS
 
-SCOPE LIMITATIONS (What Review Agent DOES and DOES NOT do):
+**SCOPE LIMITATIONS:**
 
 ✅ REVIEW AGENT RESPONSIBILITIES:
 • Create comprehensive merge requests with proper context
@@ -1363,17 +1312,19 @@ def get_review_prompt(pipeline_config=None):
 
 {completion_signal}
 
-═══════════════════════════════════════════════════════════════════════════
-                        EXAMPLE OUTPUT
-═══════════════════════════════════════════════════════════════════════════
+---
 
-SUCCESS: MR created → Pipeline monitored (pending→running→success) → Jobs verified (all ✅) → Merged → Issue closed → Branch deleted → Report generated
+## EXAMPLE OUTPUT
 
-REVIEW_PHASE_COMPLETE: Issue #123 merged. Validation: Pipeline #4259 ✅, 5 requirements ✓, 4 AC ✓. Report: logs/runs/.../issue_123_final_report.md (5 cycles, 75% pipeline success, 92% coverage).
+**Success Flow:**
+MR created → Pipeline monitored (pending→running→success) → Jobs verified (all ✅) → Validation complete (5 requirements, 4 AC) → Merged → Issue closed → Branch deleted → Final report generated
 
-PIPELINE FAILURE: Pipeline #4260 failed → test-job errors → NOT MERGING → Escalate to supervisor
+**Completion:**
+REVIEW_PHASE_COMPLETE: Issue #123 merged. Pipeline #4259 ✅, 5 requirements ✓, 4 AC ✓. Report: logs/runs/.../issue_123_final_report.md (5 cycles, 75% success, 92% coverage).
 
-PIPELINE_FAILED_TESTS: Pipeline #4260 - test errors (Expected 401, got 500). Root: Missing error handling. Escalating for Coding Agent fix.
+**Failure Flow:**
+Pipeline #4260 failed → test-job errors → PIPELINE_FAILED_TESTS: Expected 401, got 500. Root: Missing error handling. NOT MERGING. Escalating to Coding Agent.
 
-NETWORK RETRY: Pipeline #4261 failed (network) → Wait 60s → Retry → Pipeline #4262 success ✅ → Merged
+**Network Retry:**
+Pipeline #4261 failed (network) → Wait 60s → Retry → Pipeline #4262 success ✅ → Proceed to merge
 """

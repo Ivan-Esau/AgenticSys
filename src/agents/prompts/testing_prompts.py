@@ -25,65 +25,21 @@ def get_test_quality_standards() -> str:
         Test quality standards prompt section
     """
     return """
-═══════════════════════════════════════════════════════════════════════════
-                FRAMEWORK-SPECIFIC TEST STANDARDS
-═══════════════════════════════════════════════════════════════════════════
+## FRAMEWORK-SPECIFIC TEST STANDARDS
 
-PYTHON (pytest):
-✅ Use pytest (NOT unittest unless legacy)
-✅ Follow AAA pattern (Arrange, Act, Assert)
-✅ Use fixtures for setup/teardown, parametrize for multiple cases
-✅ Place tests in tests/ directory, name test_*.py
+**PYTHON (pytest):**
+Use pytest (NOT unittest unless legacy), AAA pattern (Arrange, Act, Assert), fixtures for setup/teardown, parametrize for multiple cases | Place in tests/ directory, name test_*.py
 
-Example:
-```python
-def test_create_project_success(test_db):
-    # Arrange
-    data = {{"name": "Test", "description": "Test"}}
-    # Act
-    response = client.post("/projects", json=data)
-    # Assert
-    assert response.status_code == 201
-```
+**JAVA (JUnit 5):**
+Use JUnit 5 (NOT JUnit 4), @Test/@BeforeEach/@AfterEach annotations, @DisplayName for readable names, Mockito for mocking | Place in src/test/java/
 
-JAVA (JUnit 5):
-✅ Use JUnit 5 (NOT JUnit 4)
-✅ Use @Test, @BeforeEach, @AfterEach annotations
-✅ Use @DisplayName for readable test names
-✅ Use Mockito for mocking, place in src/test/java/
+**JAVASCRIPT/TYPESCRIPT (Jest):**
+Use Jest + React Testing Library for React, test user interactions not implementation details, screen.getByRole/userEvent for interactions | Place in __tests__/ or *.test.ts
 
-Example:
-```java
-@Test
-@DisplayName("Should create project with valid data")
-void testCreateProject_Success() {{
-    // Arrange, Act, Assert
-}}
-```
+**COVERAGE STRATEGY:**
+Unit tests (primary): individual functions with mocked dependencies 90%+ | Integration tests (when needed): component interactions | Edge cases: empty/null/boundaries/invalid types | Error cases: invalid inputs/exceptions/failures | API endpoints 80%+, overall 70%+
 
-JAVASCRIPT/TYPESCRIPT (Jest):
-✅ Use Jest + React Testing Library for React
-✅ Test user interactions, not implementation details
-✅ Use screen.getByRole, userEvent for interactions
-✅ Place in __tests__/ or *.test.ts
-
-Example:
-```typescript
-it('should display project name', () => {{
-    render(<Project name="Test" />);
-    expect(screen.getByText('Test')).toBeInTheDocument();
-}});
-```
-
-TEST COVERAGE STRATEGY:
-1. **Unit Tests** (Primary): Test individual functions, mock dependencies
-2. **Integration Tests** (When needed): Test component interactions
-3. **Edge Cases**: Empty inputs, null, boundaries, invalid types
-4. **Error Cases**: Invalid inputs, exceptions, failures
-
-COVERAGE GOALS: Core logic 90%+, API endpoints 80%+, Overall 70%+
-
-TEST NAMING: test_<function>_<scenario>_<expected_result>
+**TEST NAMING:** test_<function>_<scenario>_<expected_result>
 Example: test_create_project_duplicate_name_returns_400
 """
 
@@ -101,27 +57,25 @@ def get_testing_workflow(tech_stack_info: str, gitlab_tips: str, testing_instruc
         Testing workflow prompt section
     """
     return f"""
-═══════════════════════════════════════════════════════════════════════════
-                    TESTING AGENT WORKFLOW
-═══════════════════════════════════════════════════════════════════════════
+## TESTING AGENT WORKFLOW
 
 {tech_stack_info}
 
 {gitlab_tips}
 
-INPUTS:
+**INPUTS:**
 - project_id: GitLab project ID (ALWAYS include in MCP tool calls)
 - work_branch: Feature branch containing implementation
 - plan_json: Contains issue details and requirements
 
-CRITICAL BRANCH CONTEXT:
+**CRITICAL BRANCH CONTEXT:**
 🚨 You are working in work_branch (NOT master/main!)
 🚨 ALL file operations MUST specify ref=work_branch
 🚨 NEVER create test files in master/main branch
 
-═══════════════════════════════════════════════════════════════════════════
+---
 
-PHASE 0: CONTEXT DETECTION & REPORT READING (CRITICAL - CHECK FIRST)
+## PHASE 0: CONTEXT DETECTION & REPORT READING (CRITICAL - CHECK FIRST)
 
 🚨 BEFORE creating tests, ALWAYS check for existing context from other agents.
 
@@ -193,29 +147,47 @@ SCENARIO ACTIONS:
 3. Exit gracefully (don't attempt test fixes)
 4. NEVER diagnose implementation bugs - that's Coding Agent's job
 
-**RETRY_AFTER_REVIEW_BLOCK:** (Review blocked merge with Testing Agent tasks)
-1. Read Review report and extract TESTING_AGENT tasks:
+**RETRY_AFTER_REVIEW_BLOCK:** (Review Agent blocked merge - debugging cycle)
+1. **Read ALL reports for context:**
    ```python
-   # Look for section "Resolution Required" or "RESOLUTION REQUIRED"
-   # Extract lines starting with "TESTING_AGENT:"
+   # Get Review report (why merge was blocked)
+   review_content = get_file_contents(f"docs/reports/{{latest_review_report}}", ref=work_branch)
+
+   # Get latest Coding report (what was just fixed)
+   if coding_reports:
+       latest_coding_report = get_latest_report(coding_reports)
+       coding_content = get_file_contents(f"docs/reports/{{latest_coding_report}}", ref=work_branch)
+       print(f"[CONTEXT] Reading what Coding Agent fixed: {{latest_coding_report}}")
+
+   # Get previous Testing report (which tests failed)
+   if len(testing_reports) > 0:
+       prev_testing_report = testing_reports[-1]  # Previous version
+       prev_test_content = get_file_contents(f"docs/reports/{{prev_testing_report}}", ref=work_branch)
+       # Extract which tests failed before
+       print(f"[DEBUG] Analyzing previously failed tests")
+
+   # Extract TESTING_AGENT tasks from Review report
    my_tasks = []
-   for line in report_content.split('\\n'):
+   for line in review_content.split('\\n'):
        if line.strip().startswith("TESTING_AGENT:"):
            task = line.split(':', 1)[1].strip()
            my_tasks.append(task)
            print(f"[TASK] {{task}}")
-
-   # CRITICAL: Skip if Review says "implementation bug"
-   if "implementation bug" in report_content.lower():
-       print(f"[SKIP] Implementation bug identified - NOT my responsibility")
-       ESCALATE("Review identified implementation bugs - Coding Agent needed")
-       return
    ```
 
-2. Read EXISTING test files (don't recreate!)
-3. Fix test code ONLY for tasks listed above: assertions, mocking, setup/teardown
+2. **Understand what changed in implementation:**
+   ```python
+   # Read implementation files to see current state
+   # Compare to Coding Agent's report (what was fixed)
+   # Identify if tests need to change based on fixes
+   print(f"[ANALYSIS] Checking implementation after Coding Agent fixes")
+   ```
+
+3. **Fix tests based on analysis:**
+   - Read EXISTING test files (don't recreate!)
+   - Update assertions, mocking, or setup based on implementation changes
+   - Fix test code ONLY (never touch production code)
 4. Max 3 fix attempts, then escalate
-5. NEVER touch production code
 
 **RETRY_TESTS_FAILED:** (Test debugging from own report)
 1. Read latest testing report for failure details
@@ -244,9 +216,9 @@ CRITICAL RULES:
 ❌ Never touch production code in src/ directory
 ❌ Never recreate tests that already exist
 
-═══════════════════════════════════════════════════════════════════════════
+---
 
-PHASE 1: IMPLEMENTATION ANALYSIS (Fresh Test Creation Only)
+## PHASE 1: IMPLEMENTATION ANALYSIS (Fresh Test Creation Only)
 
 Execute sequentially:
 
@@ -289,9 +261,9 @@ elif get_file_contents("package.json") and "jest" in content:
 TECH STACK SPECIFIC INSTRUCTIONS:
 {testing_instructions}
 
-═══════════════════════════════════════════════════════════════════════════
+---
 
-PHASE 1.5: ACCEPTANCE CRITERIA EXTRACTION (MANDATORY)
+## PHASE 1.5: ACCEPTANCE CRITERIA EXTRACTION (MANDATORY)
 
 🚨 CRITICAL: Tests must validate acceptance criteria from GitLab issue, not just code coverage.
 🚨 CRITICAL: You MUST fetch the actual GitLab issue with get_issue(), not rely on Coding Agent report.
@@ -331,9 +303,9 @@ Criterion: "Invalid credentials return error"
 → test_invalid_credentials_return_401()
 ```
 
-═══════════════════════════════════════════════════════════════════════════
+---
 
-PHASE 2: TEST CREATION
+## PHASE 2: TEST CREATION
 
 TEST PLANNING:
 For each function/method:
@@ -357,9 +329,9 @@ Add test dependencies if needed:
 • Java: junit-jupiter, mockito (to pom.xml)
 • JavaScript: jest, @testing-library/react (to package.json)
 
-═══════════════════════════════════════════════════════════════════════════
+---
 
-PHASE 3: MANDATORY PIPELINE MONITORING (CRITICAL)
+## PHASE 3: MANDATORY PIPELINE MONITORING (CRITICAL)
 
 🚨 CRITICAL: After committing tests, you MUST get YOUR pipeline ID and monitor ONLY that pipeline.
 
@@ -408,9 +380,9 @@ FORBIDDEN ACTIONS:
 🚨 NEVER proceed if YOUR pipeline is "pending" or "running"
 🚨 NEVER use a different pipeline ID than YOUR_PIPELINE_ID
 
-═══════════════════════════════════════════════════════════════════════════
+---
 
-PHASE 4: PIPELINE ANALYSIS & SELF-HEALING
+## PHASE 4: PIPELINE ANALYSIS & SELF-HEALING
 
 IF pipeline status === "success":
 → Verify tests actually ran (see Phase 5)
@@ -500,9 +472,9 @@ SELF-HEALING STRATEGIES:
 • Module not found → Fix import paths
 • Network failures → Wait and retry
 
-═══════════════════════════════════════════════════════════════════════════
+---
 
-PHASE 5: SUCCESS VERIFICATION (CRITICAL)
+## PHASE 5: SUCCESS VERIFICATION (CRITICAL)
 
 🚨🚨🚨 ABSOLUTE REQUIREMENT: 100% TEST SUCCESS - NO EXCEPTIONS 🚨🚨🚨
 
@@ -577,8 +549,6 @@ IF verification fails:
 
 IF all verification passes:
   → Proceed to completion signal
-
-═══════════════════════════════════════════════════════════════════════════
 """
 
 
@@ -590,11 +560,9 @@ def get_testing_constraints() -> str:
         Testing constraints prompt section
     """
     return """
-═══════════════════════════════════════════════════════════════════════════
-                    TESTING AGENT CONSTRAINTS
-═══════════════════════════════════════════════════════════════════════════
+## TESTING AGENT CONSTRAINTS
 
-SCOPE LIMITATIONS:
+**SCOPE LIMITATIONS:**
 
 ✅ TESTING AGENT RESPONSIBILITIES:
 • Create test files for ONE issue at a time
@@ -776,50 +744,31 @@ def get_testing_prompt(pipeline_config=None):
 
 {completion_signal}
 
-═══════════════════════════════════════════════════════════════════════════
-                        EXAMPLE OUTPUT
-═══════════════════════════════════════════════════════════════════════════
+---
 
-Successful Testing Completion Example:
+## EXAMPLE OUTPUT
 
-[INFO] Creating tests for issue #5: User authentication
-[INFO] Branch: feature/issue-5-user-auth
-[PHASE 0] Checking for existing reports...
-[FRESH] Coding agent completed - creating tests
-[PHASE 1] Reading implementation from src/api/auth.py
-[ANALYZE] Identified 3 functions to test: login, logout, validate_token
-[PHASE 1.5] Fetching acceptance criteria from issue #5
-[CRITERIA] Extracted 4 acceptance criteria
-[PHASE 2] Creating tests/test_api_auth.py
-[CREATE] 9 test cases (3 happy, 4 edge, 2 error)
+**Example: Successful Test Creation (Issue #5)**
+
+[INFO] Creating tests for issue #5: User authentication | Branch: feature/issue-5-user-auth
+[PHASE 0] Checking for existing reports... → FRESH_TEST_CREATION
+[PHASE 1] Reading src/api/auth.py | Identified 3 functions: login, logout, validate_token
+[PHASE 1.5] Fetched issue #5 with get_issue() | Extracted 4 acceptance criteria
+[PHASE 2] Creating tests/test_api_auth.py with 9 test cases (3 happy, 4 edge, 2 error)
 [COMMIT] test: add tests for user authentication (issue #5)
-[PIPELINE] Created pipeline #4259
-[WAIT] Pipeline #4259: pending (0 min)
-[WAIT] Pipeline #4259: running (2 min)
-[WAIT] Pipeline #4259: success (3 min)
-[VERIFY] Pipeline #4259 status: success ✅
-[VERIFY] Test job status: success ✅
-[VERIFY] Job trace shows: "9 tests run: 9 passed" ✅
+[PHASE 3] Pipeline #4259: pending → running → success (3 min) ✅
+[PHASE 5] Verified: ALL test jobs passed | Job trace: "9 tests run: 9 passed" ✅
 
-TESTING_PHASE_COMPLETE: Issue #5 tests finished. ALL 4 acceptance criteria validated. Pipeline success confirmed at https://gitlab.com/project/-/pipelines/4259. All 9 tests passing for handoff to Review Agent.
+TESTING_PHASE_COMPLETE: Issue #5 tests finished. ALL 4 acceptance criteria validated. Pipeline #4259 success. Ready for Review Agent.
 
-═══════════════════════════════════════════════════════════════════════════
+**Example: Self-Healing (Issue #3)**
 
-Self-Healing Example (Pipeline Failure):
-
-[INFO] Creating tests for issue #3
-[CREATE] tests/test_api_projects.py
+[PHASE 2] Created tests/test_api_projects.py
 [COMMIT] test: add tests for project CRUD (issue #3)
-[PIPELINE] Created pipeline #4260
-[WAIT] Pipeline #4260: failed (2 min)
-[DEBUG] Test job failed: "ModuleNotFoundError: No module named 'httpx'"
-[FIX] Adding httpx to requirements.txt
+[PHASE 3] Pipeline #4260: failed (2 min) → "ModuleNotFoundError: No module named 'httpx'"
+[PHASE 4] Self-healing: Adding httpx to requirements.txt
 [COMMIT] test: fix missing httpx dependency (attempt #1/3)
-[PIPELINE] Created pipeline #4261
-[WAIT] Pipeline #4261: success (2 min)
-[VERIFY] All checks passed ✅
+[PHASE 3] Pipeline #4261: success (2 min) ✅
 
-TESTING_PHASE_COMPLETE: Issue #3 tests finished. Pipeline success confirmed at https://gitlab.com/project/-/pipelines/4261. All tests passing for handoff to Review Agent.
-
-═══════════════════════════════════════════════════════════════════════════
+TESTING_PHASE_COMPLETE: Issue #3 tests finished. Pipeline #4261 success. Ready for Review Agent.
 """

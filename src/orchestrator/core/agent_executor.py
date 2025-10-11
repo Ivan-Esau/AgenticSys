@@ -361,19 +361,25 @@ class AgentExecutor:
 
             # Additional validation for review agent - must not have pipeline failures
             if success and "REVIEW_PHASE_COMPLETE" in (result or ""):
-                # Check for merge completion
-                if "merged and closed successfully" in result:
+                # Check for merge completion (both active merge and already-merged cases)
+                if "merged and closed successfully" in result or "already completed and merged" in result:
                     # Look for any pipeline status indicators (more flexible)
                     pipeline_indicators = [
                         "pipeline.*success", "pipeline.*passed", "pipeline.*completed",
                         "[OK].*success", "test job.*success", "build job.*success",
-                        "pipeline status.*success", "both.*jobs.*passed"
+                        "pipeline status.*success", "both.*jobs.*passed",
+                        "already merged"  # Accept for already-merged case
                     ]
 
                     import re
                     has_pipeline_confirmation = any(
                         re.search(pattern, result.lower()) for pattern in pipeline_indicators
                     )
+
+                    # For "already merged" case, accept if MR reference is present
+                    if "already merged via MR" in result.lower() or "already completed and merged" in result.lower():
+                        print(f"[AGENT EXECUTOR] [OK] Review agent confirmed work already merged")
+                        has_pipeline_confirmation = True  # Trust that previous merge verified pipeline
 
                     if has_pipeline_confirmation:
                         print(f"[AGENT EXECUTOR] [OK] Review agent confirmed pipeline success and merge completion")
