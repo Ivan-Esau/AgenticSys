@@ -198,23 +198,24 @@ class App {
     }
 
     async startSystem() {
-        const config = this.ui.getConfiguration();
-
-        // Debug logging
-        console.log('Starting system with config:', config);
-
-        // Validate configuration
-        if (!config.project_id || config.project_id.trim() === '') {
-            this.ui.showError('Please select a project from the dropdown or enter a GitLab project ID');
-            return;
-        }
-
-        if (config.mode === 'single_issue' && !config.specific_issue) {
-            this.ui.showError('Please enter an issue number');
-            return;
-        }
-
         try {
+            // Get and validate configuration (may throw validation errors)
+            const config = this.ui.getConfiguration();
+
+            // Debug logging
+            console.log('Starting system with config:', config);
+
+            // Additional validation
+            if (!config.project_id || config.project_id.trim() === '') {
+                this.ui.showError('Please select a project from the dropdown or enter a GitLab project ID');
+                return;
+            }
+
+            if (config.mode === 'single_issue' && !config.specific_issue) {
+                this.ui.showError('Please enter an issue number');
+                return;
+            }
+
             this.ui.showInfo('Starting system...');
             this.ui.updateSystemStatus('starting');
 

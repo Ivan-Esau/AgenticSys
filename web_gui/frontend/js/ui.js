@@ -302,8 +302,14 @@ class UIManager {
         const mode = this.elements.executionMode.value;
         const projectId = this.elements.projectSelect.value || this.elements.projectId.value.trim();
 
+        // Sanitize project_id to prevent injection attacks
+        const sanitizedProjectId = this.sanitizeProjectId(projectId);
+        if (!sanitizedProjectId) {
+            throw new Error('Invalid project ID. Only alphanumeric characters, hyphens, and underscores are allowed.');
+        }
+
         const config = {
-            project_id: projectId,
+            project_id: sanitizedProjectId,
             mode: mode,
             // Tech stack will be auto-detected by backend - not sent from frontend
             auto_merge: this.elements.autoMerge.checked,
@@ -313,7 +319,11 @@ class UIManager {
         };
 
         if (mode === 'single_issue') {
-            config.specific_issue = parseInt(this.elements.issueNumber.value);
+            const issueNumber = this.safeParseInt(this.elements.issueNumber.value);
+            if (issueNumber === null) {
+                throw new Error('Invalid issue number. Please enter a valid number between 1 and 999999.');
+            }
+            config.specific_issue = issueNumber;
         }
 
         return config;
@@ -577,11 +587,48 @@ class UIManager {
     }
 
     getLLMConfiguration() {
+        const rawTemperature = parseFloat(this.elements.llmTemperature.value);
+        const clampedTemperature = this.clampTemperature(rawTemperature);
+
         return {
             provider: this.elements.llmProvider.value,
             model: this.elements.llmModel.value,
-            temperature: parseFloat(this.elements.llmTemperature.value) || 0.7
+            temperature: clampedTemperature
         };
+    }
+
+    // Input validation and sanitization methods
+    sanitizeProjectId(projectId) {
+        if (!projectId || typeof projectId !== 'string') {
+            return null;
+        }
+        // Only allow alphanumeric characters, hyphens, and underscores
+        const sanitized = projectId.trim();
+        if (!/^[a-zA-Z0-9\-_]+$/.test(sanitized)) {
+            return null;
+        }
+        return sanitized;
+    }
+
+    safeParseInt(value) {
+        try {
+            const num = parseInt(value, 10);
+            // Check if valid number and within reasonable range
+            if (isNaN(num) || num < 1 || num > 999999) {
+                return null;
+            }
+            return num;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    clampTemperature(temperature) {
+        // Clamp temperature to valid range [0, 2]
+        if (isNaN(temperature)) {
+            return 0.7; // Default fallback
+        }
+        return Math.max(0.0, Math.min(2.0, temperature));
     }
 }
 
