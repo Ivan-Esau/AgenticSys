@@ -16,7 +16,7 @@ GITLAB MCP SERVER BEST PRACTICES AND KNOWN ISSUES:
    - ALWAYS specify ref=branch_name parameter in MCP tool calls:
      * create_or_update_file(ref=work_branch, commit_message="feat: Add feature", ...)
      * get_file_contents(ref=work_branch, ...)
-     * get_repo_tree(ref=work_branch, ...)
+     * get_repository_tree(ref=work_branch, ...)
    - CRITICAL: create_or_update_file REQUIRES BOTH ref AND commit_message:
      * WRONG: create_or_update_file(ref=work_branch, file_path="...", content="...")
      * CORRECT: create_or_update_file(ref=work_branch, commit_message="feat: Add feature", file_path="...", content="...")

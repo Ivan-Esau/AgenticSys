@@ -177,6 +177,9 @@ print(f"[REVIEW] Triggered by: {pipeline_response['user']['username']}")
 
 Step 2: Monitor ONLY YOUR Pipeline
 ```python
+import time
+start_time = time.time()
+
 while True:
     status = get_pipeline(pipeline_id=YOUR_PIPELINE_ID)['status']
 
@@ -189,10 +192,17 @@ while True:
         break
     elif status in ["running", "pending"]:
         print(f"[REVIEW] ⏳ Pipeline #{{{{YOUR_PIPELINE_ID}}}} status: {{{{status}}}}")
-        wait(30)  # Wait 30 seconds before next check
+        time.sleep(30)  # Wait 30 seconds before next check
+        continue  # LOOP BACK, DON'T EXIT
     else:
         print(f"[REVIEW] ⚠️ Pipeline #{{{{YOUR_PIPELINE_ID}}}} status: {{{{status}}}}")
         break
+
+    # Timeout check
+    if (time.time() - start_time) > 1200:  # 20 minutes
+        print("[ERROR] Pipeline timeout after 20 minutes")
+        ESCALATE("Pipeline timeout after 20 minutes - check GitLab UI")
+        return
 ```
 
 FORBIDDEN PRACTICES:
@@ -485,7 +495,7 @@ Execute these steps sequentially:
 
 Step 1 - Project Context:
 • get_project(project_id) → Project configuration
-• get_repo_tree(ref=work_branch) → Understand changes
+• get_repository_tree(ref=work_branch) → Understand changes
 • list_merge_requests(source_branch=work_branch) → Check existing MRs
 
 Step 1.5 - Read ALL Planning Documents:
@@ -545,7 +555,7 @@ if is_planning_branch:
     issue_iid = None
     issue = None
 else:
-    match = re.search(r'issue-(\d+)', work_branch)
+    match = re.search(r'issue-(\\d+)', work_branch)
     issue_iid = int(match.group(1)) if match else None
 
     if not issue_iid:
@@ -688,11 +698,12 @@ print(f"[REVIEW] Monitoring YOUR pipeline: #{{{{YOUR_PIPELINE_ID}}}}")
 
 Step 2: Monitor YOUR Pipeline (ACTIVE WAITING)
 ```python
+import time
 max_wait_time = 20 * 60  # 20 minutes
-start_time = current_time()
+start_time = time.time()
 check_interval = 30  # 30 seconds
 
-while (current_time() - start_time) < max_wait_time:
+while (time.time() - start_time) < max_wait_time:
     status = get_pipeline(pipeline_id=YOUR_PIPELINE_ID)['status']
 
     if status == "success":
@@ -701,12 +712,21 @@ while (current_time() - start_time) < max_wait_time:
         # Get failure details and escalate
         break
     elif status in ["pending", "running"]:
-        elapsed = (current_time() - start_time) / 60
+        elapsed = (time.time() - start_time) / 60
         print(f"[WAIT] Pipeline #{{{{YOUR_PIPELINE_ID}}}} status: {{status}} ({{elapsed:.1f}} minutes)")
-        wait(check_interval)
+        time.sleep(check_interval)
+        continue  # LOOP BACK, DON'T EXIT
     else:
         # Unexpected status, escalate
+        print(f"[REVIEW] Unexpected pipeline status: {{status}}")
+        ESCALATE(f"Unknown pipeline status: {{status}}")
         break
+
+# If we exit the loop due to timeout
+if (time.time() - start_time) >= max_wait_time:
+    print("[ERROR] Pipeline timeout after 20 minutes")
+    ESCALATE("Pipeline timeout after 20 minutes - check GitLab UI")
+    return
 ```
 
 Step 3: Handle Pipeline Results (ZERO-TOLERANCE ENFORCEMENT)
@@ -791,7 +811,7 @@ PHASE 2.5: COMPREHENSIVE REQUIREMENT & ACCEPTANCE CRITERIA VALIDATION (MANDATORY
 
 📋 VALIDATION STEPS:
 
-1. Extract issue IID: `re.search(r'issue-(\d+)', work_branch)`
+1. Extract issue IID: `re.search(r'issue-(\\d+)', work_branch)`
 2. Fetch issue: `get_issue(project_id, issue_iid)` → Parse "Anforderungen/Requirements" & "Akzeptanzkriterien/Acceptance Criteria"
 3. Validate requirements: For each requirement → Identify files → Read & verify implementation → Document
 4. Validate AC: For each criterion → Find test → Verify test exists & passed → Document
@@ -877,7 +897,7 @@ PHASE 4: POST-MERGE VERIFICATION
 Verify all actions completed:
 ✅ get_merge_request → state === "merged"
 ✅ get_issue → state === "closed"
-✅ Verify branch deleted (try get_repo_tree, should fail)
+✅ Verify branch deleted (try get_repository_tree, should fail)
 ✅ get_commits(ref="master") → merge commit present
 
 PHASE 5: COMPREHENSIVE FINAL REPORT GENERATION (MANDATORY)

@@ -100,7 +100,7 @@ Step 1 - Check Existing Plan:
 
 Step 2 - Gather Project Information:
 • list_issues() → Get ALL project issues with full descriptions
-• get_repo_tree(path="", ref="master") → Understand project structure
+• get_repository_tree(path="", ref="master") → Understand project structure
 
 Step 3 - Check Development State (if needed):
 • list_merge_requests() → Check completed/pending work
@@ -512,7 +512,7 @@ Verify ALL of the following:
    ✅ Verify no circular dependencies
 
 2. Planning documentation verification:
-   ✅ Use get_repo_tree(path="docs", ref="master") to verify planning docs created
+   ✅ Use get_repository_tree(path="docs", ref="master") to verify planning docs created
    ✅ REQUIRED: Confirm docs/ORCH_PLAN.json exists
    ✅ REQUIRED: Confirm docs/README.md exists
    ✅ REQUIRED: Confirm docs/ARCHITECTURE.md exists

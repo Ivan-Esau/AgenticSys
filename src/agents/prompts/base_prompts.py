@@ -104,11 +104,11 @@ TOOL SELECTION STRATEGY (IF-THEN PATTERNS):
 FILE OPERATIONS:
 ✅ Use get_file_contents for reading files (NEVER bash cat/head/tail)
 ✅ Use create_or_update_file for writing (NEVER bash echo/heredoc)
-✅ Use get_repo_tree for listing directories (NEVER bash find/ls)
+✅ Use get_repository_tree for listing directories (NEVER bash find/ls)
 
 SEARCH OPERATIONS:
 ✅ Use MCP search tools when available for project information
-✅ Use get_repo_tree to understand project structure
+✅ Use get_repository_tree to understand project structure
 ✅ Batch multiple independent file reads in parallel
 
 REPOSITORY OPERATIONS:
@@ -124,7 +124,7 @@ FORBIDDEN OPERATIONS:
 
 TIMEOUT SPECIFICATIONS:
 • File operations (get_file_contents, create_or_update_file): 30 seconds max
-• Repository operations (get_repo_tree, list_merge_requests): 60 seconds max
+• Repository operations (get_repository_tree, list_merge_requests): 60 seconds max
 • Pipeline checks (get_pipeline, get_pipeline_jobs): 10 seconds per check
 • Pipeline total wait time: 20 minutes max (with 30-second check intervals)
 • Network operations: 120 seconds with automatic retry (max 2 retries)
@@ -134,7 +134,7 @@ SEQUENTIAL EXECUTION (To avoid timeouts):
 When gathering project context, execute sequentially:
 1. get_file_contents("docs/ORCH_PLAN.json") - Check for existing plan first
 2. list_issues() - Get project issues
-3. get_repo_tree() - Understand structure
+3. get_repository_tree() - Understand structure
 4. list_merge_requests() - Check development state
 
 Note: MCP server may timeout with parallel calls. Execute one at a time.
@@ -295,12 +295,12 @@ NEVER ASSUME - ALWAYS VERIFY
 
 KEY VERIFICATIONS:
 1. **File Existence:** Use get_file_contents() - "not found" is normal
-2. **Branch State:** Try get_repo_tree(ref=work_branch) - create if error
+2. **Branch State:** Try get_repository_tree(ref=work_branch) - create if error
 3. **Pipeline Currency (CRITICAL):** Use get_latest_pipeline_for_ref()
    - Store YOUR_PIPELINE_ID = pipeline['id']
    - Monitor ONLY this pipeline
    - NEVER use old pipeline results
-4. **Project Structure:** Use get_repo_tree() to detect, don't assume
+4. **Project Structure:** Use get_repository_tree() to detect, don't assume
 5. **Tech Stack:** Analyze existing files (requirements.txt, pom.xml, package.json)
 6. **User Intent:** Ask for clarification if ambiguous
 
@@ -472,7 +472,7 @@ VERSION DETECTION (CRITICAL - DO THIS CORRECTLY TO AVOID OVERWRITES):
 Step 1: Check for existing reports for this agent + issue
 ```python
 # List existing reports in docs/reports/
-existing_files = get_repo_tree(path="docs/reports/", ref=work_branch)
+existing_files = get_repository_tree(path="docs/reports/", ref=work_branch)
 
 # Clean agent name (remove spaces)
 agent_name_clean = "{agent_name}".replace(" ", "")  # "Coding Agent" → "CodingAgent"

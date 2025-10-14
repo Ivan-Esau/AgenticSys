@@ -105,15 +105,18 @@ class PlanningManager:
     def parse_implementation_order(self, plan_data: Dict, all_issues: List[Dict]) -> List[Dict]:
         """Parse implementation_order from ORCH_PLAN.json"""
         prioritized = []
-        issue_map = {issue.get('iid'): issue for issue in all_issues}
+        # Convert iids to integers for consistent comparison (handles string/int mismatches)
+        issue_map = {int(issue.get('iid')): issue for issue in all_issues if issue.get('iid')}
 
         implementation_order = plan_data.get('implementation_order', [])
         print(f"[PLANNING] Implementation order from plan: {implementation_order}")
 
+        # Convert implementation_order values to integers for matching
         for issue_iid in implementation_order:
-            if issue_iid in issue_map:
-                prioritized.append(issue_map[issue_iid])
-                print(f"[PLANNING] Added Issue #{issue_iid} from implementation_order")
+            issue_iid_int = int(issue_iid)  # Ensure integer type for lookup
+            if issue_iid_int in issue_map:
+                prioritized.append(issue_map[issue_iid_int])
+                print(f"[PLANNING] Added Issue #{issue_iid_int} from implementation_order")
 
         # Add any remaining issues not in the order
         for issue in all_issues:
@@ -383,15 +386,31 @@ class PlanningManager:
                 "ref": ref
             })
 
-            # Handle result - could be dict or string
+            # Handle result - could be dict, JSON string, or raw content
+            import json
             file_content = None
-            if isinstance(result, dict) and 'content' in result:
+
+            # If result is a string, try to parse it as JSON first
+            if isinstance(result, str):
+                try:
+                    parsed_result = json.loads(result)
+                    # Check if it's a GitLab API response with 'content' field
+                    if isinstance(parsed_result, dict) and 'content' in parsed_result:
+                        print("[PLANNING] [DEBUG] MCP returned GitLab API response as JSON string")
+                        file_content = parsed_result['content']
+                    else:
+                        # It's raw JSON content (ORCH_PLAN.json directly)
+                        print("[PLANNING] [DEBUG] MCP returned raw JSON content")
+                        file_content = result
+                except json.JSONDecodeError:
+                    # Not JSON, treat as raw content
+                    print("[PLANNING] [DEBUG] MCP returned non-JSON string content")
+                    file_content = result
+            elif isinstance(result, dict) and 'content' in result:
+                print("[PLANNING] [DEBUG] MCP returned GitLab API response as dict")
                 file_content = result['content']
-            elif isinstance(result, str):
-                file_content = result
 
             if file_content:
-                import json
                 try:
                     plan_json = json.loads(file_content)
 

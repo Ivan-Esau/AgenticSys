@@ -49,7 +49,9 @@
       "Bash(fi)",
       "Bash(if [ -f \"docs/uml_diagramme.md\" ])",
       "Bash(then mv docs/uml_diagramme.md docs/architecture/)",
-      "Bash(docker compose:*)"
+      "Bash(docker compose:*)",
+      "Bash(start_web_gui.bat)",
+      "Bash(del \"C:\\Users\\esaui\\Desktop\\PythonProjects\\AgenticSys\\test_implementation_order_fix.py\")"
     ],
     "deny": [],
     "ask": []

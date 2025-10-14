@@ -1,6 +1,7 @@
 """
 MCP (Model Context Protocol) client module.
 Handles connection and tool loading from GitLab MCP server.
+Uses Streamable HTTP transport (stateless by design).
 """
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -88,9 +89,9 @@ async def load_mcp_tools(log_callback=None) -> Tuple[List[Any], MultiServerMCPCl
             await log(f"[MCP] Successfully connected! Loaded {len(tools)} tools", "success")
 
             # Cache the connection for reuse
+            # Note: Tools will be wrapped in get_common_tools_and_client()
             _mcp_cache = (tools, client)
 
-            # Return tools directly - wrapping breaks LangGraph compatibility
             return tools, client
 
         except asyncio.TimeoutError:
@@ -122,17 +123,25 @@ async def get_common_tools_and_client(log_callback=None) -> Tuple[List[Any], Mul
     Get common tools and MCP client for agents.
     This is the primary entry point for agents needing GitLab tools.
 
+    NOTE: Uses Streamable HTTP transport which is stateless by design.
+    Each tool call creates a new HTTP session (~200-300ms overhead).
+
     Args:
         log_callback: Optional async function to send logs (for WebSocket integration)
 
     Returns:
-        Tuple of (tools list, MCP client instance)
+        Tuple of (tools list with safety wrappers, MCP client instance)
     """
     # Validate configuration before connecting
     if not Config.validate():
         raise ValueError("Invalid configuration. Please check your .env file.")
 
     tools, client = await load_mcp_tools(log_callback)
+
+    # Ensure tools are wrapped (handles both fresh and cached tools)
+    # Wrapping is idempotent - already-wrapped tools won't be double-wrapped
+    from .safe_tools import wrap_tools_with_safety
+    tools = wrap_tools_with_safety(tools)
 
     return tools, client
 

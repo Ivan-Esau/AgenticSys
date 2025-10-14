@@ -417,11 +417,18 @@ class Supervisor:
         print("[WORKFLOW] [OK] Planning Agent execution successful")
         await self._update_pipeline_stage("planning", "completed")
 
+        print(f"\n[DEBUG] ========== POST-PLANNING CHECKPOINT ==========")
+        print(f"[DEBUG] Current mode: {mode}")
+        print(f"[DEBUG] Checking if mode == 'analyze': {mode == 'analyze'}")
+
         if mode == "analyze":
             print("\n[COMPLETE] Analysis done. Run with --apply to implement.")
+            print("[DEBUG] ========== EARLY EXIT: ANALYZE MODE ==========")
             self.state = ExecutionState.COMPLETED
             await self.show_summary()
             return
+
+        print(f"[DEBUG] Mode is '{mode}' - proceeding to implementation preparation")
 
         # Phase 1.5: Load Planning Documents from Master
         # Planning Agent commits directly to master, so load parsed ORCH_PLAN.json
@@ -441,7 +448,7 @@ class Supervisor:
                 plan = self.planning_manager.get_current_plan()
                 if plan and isinstance(plan, dict) and 'implementation_order' in plan:
                     order = plan['implementation_order']
-                    print(f"[DEBUG] Implementation order: {[item.get('issue_id') for item in order]}")
+                    print(f"[DEBUG] Implementation order: {order}")
                     print(f"[DEBUG] Total issues in plan: {len(order)}")
                 else:
                     print("[DEBUG] Plan structure: unknown or missing implementation_order")
@@ -468,14 +475,19 @@ class Supervisor:
             )
 
         # Fetch issues from GitLab
+        print(f"\n[DEBUG] ========== ISSUE FETCHING CHECKPOINT ==========")
         print(f"\n[WORKFLOW] Step 6: Fetching all open issues from GitLab")
         print(f"[DEBUG] Project ID: {self.project_id}")
         print(f"[DEBUG] Issue state filter: opened")
+
         all_gitlab_issues = await self.issue_manager.fetch_gitlab_issues()
+        print(f"[DEBUG] fetch_gitlab_issues() returned: {type(all_gitlab_issues)}")
+        print(f"[DEBUG] Number of issues returned: {len(all_gitlab_issues) if all_gitlab_issues else 0}")
 
         if not all_gitlab_issues:
             print("[WORKFLOW] [WARNING] No open issues found in GitLab")
             print("[DEBUG] Possible reasons: all issues closed, project has no issues, or API error")
+            print("[DEBUG] ========== EARLY EXIT: NO ISSUES FOUND ==========")
             await self.show_summary()
             return
 
@@ -483,12 +495,21 @@ class Supervisor:
         print(f"[DEBUG] Issue IIDs: {[get_issue_iid(i) for i in all_gitlab_issues]}")
 
         # Apply planning prioritization
+        print(f"\n[DEBUG] ========== PRIORITIZATION CHECKPOINT ==========")
         print(f"\n[WORKFLOW] Step 7: Applying ORCH_PLAN.json priority order")
         current_plan = self.planning_manager.get_current_plan()
+
+        print(f"[DEBUG] current_plan type: {type(current_plan)}")
+        print(f"[DEBUG] current_plan is not None: {current_plan is not None}")
+
         if current_plan and isinstance(current_plan, dict) and 'implementation_order' in current_plan:
             print(f"[DEBUG] Using ORCH_PLAN.json with {len(current_plan['implementation_order'])} issues")
+            print(f"[DEBUG] Implementation order issue IIDs: {current_plan['implementation_order']}")
         else:
             print(f"[DEBUG] Using fallback prioritization (no ORCH_PLAN.json)")
+
+        print(f"[DEBUG] Calling apply_planning_prioritization()...")
+        print(f"[DEBUG] Input: {len(all_gitlab_issues)} GitLab issues")
 
         issues = await self.planning_manager.apply_planning_prioritization(
             all_gitlab_issues,
@@ -496,10 +517,26 @@ class Supervisor:
             self.issue_manager.is_issue_completed
         )
 
+        print(f"[DEBUG] apply_planning_prioritization() returned: {type(issues)}")
+        print(f"[DEBUG] Number of issues after filtering: {len(issues) if issues else 0}")
+
+        print(f"\n[DEBUG] ========== FILTERING RESULTS CHECKPOINT ==========")
+        print(f"[DEBUG] Checking if issues list is truthy: {bool(issues)}")
+        print(f"[DEBUG] issues is None: {issues is None}")
+        print(f"[DEBUG] issues == []: {issues == []}")
+
         if issues:
-            print(f"\n[WORKFLOW] Step 8: Filtering out completed issues")
-            print(f"[WORKFLOW] [OK] {len(issues)} issues ready for implementation")
+            print(f"\n[WORKFLOW] Step 8: Issue Filtering Results")
+            print(f"[DEBUG] Total fetched from GitLab: {len(all_gitlab_issues)} open issues")
+            print(f"[DEBUG] After prioritization & filtering: {len(issues)} issues")
             print(f"[DEBUG] Filtered out: {len(all_gitlab_issues) - len(issues)} completed/merged issues")
+
+            # Show which issues were filtered out
+            filtered_out_iids = set(get_issue_iid(i) for i in all_gitlab_issues) - set(get_issue_iid(i) for i in issues)
+            if filtered_out_iids:
+                print(f"[DEBUG] Filtered out issue IIDs: {sorted(filtered_out_iids)}")
+
+            print(f"[WORKFLOW] [OK] {len(issues)} issues ready for implementation")
             print(f"\n[PRIORITY] Implementation order:")
             # Show issue details in priority order
             for idx, issue in enumerate(issues, 1):
@@ -509,14 +546,23 @@ class Supervisor:
         else:
             print("[WORKFLOW] [WARNING] No issues need implementation (all completed or merged)")
             print("[DEBUG] All issues have been filtered out - nothing to do")
+            print(f"[DEBUG] Total GitLab issues: {len(all_gitlab_issues)}")
+            print(f"[DEBUG] Issues after filtering: {len(issues) if issues else 0}")
+            print("[DEBUG] ========== EARLY EXIT: ALL ISSUES FILTERED OUT ==========")
             await self.show_summary()
             return
 
         # Phase 3: Implementation
+        print(f"\n[DEBUG] ========== PHASE 3 ENTRY CHECKPOINT ==========")
+        print(f"[DEBUG] About to check if issues list exists for Phase 3")
+        print(f"[DEBUG] issues is truthy: {bool(issues)}")
+        print(f"[DEBUG] len(issues): {len(issues) if issues else 'N/A'}")
+
         if issues:
             print("\n" + "="*60)
             print("PHASE 3: IMPLEMENTATION")
             print("="*60)
+            print(f"[DEBUG] Entered Phase 3 implementation block")
 
             # Get issues to implement
             if specific_issue:
@@ -546,8 +592,14 @@ class Supervisor:
                 print(f"  {idx}. Issue #{iid}: {title}")
 
             # Implement each issue
+            print(f"\n[DEBUG] ========== ISSUE LOOP ENTRY CHECKPOINT ==========")
             print(f"\n[WORKFLOW] Starting issue implementation loop")
+            print(f"[DEBUG] Total issues to implement: {len(issues_to_implement)}")
+            print(f"[DEBUG] Loop will iterate {len(issues_to_implement)} times")
+
             for idx, issue in enumerate(issues_to_implement, 1):
+                print(f"\n[DEBUG] ========== LOOP ITERATION {idx}/{len(issues_to_implement)} ==========")
+                print(f"[DEBUG] Processing issue index: {idx}")
                 issue_iid = get_issue_iid(issue)
                 issue_title = issue.get('title', 'Unknown')
 
@@ -583,9 +635,16 @@ class Supervisor:
                     print(f"[DEBUG] Next: Issue #{get_issue_iid(issues_to_implement[idx])} ({idx+1}/{len(issues_to_implement)})")
                     await asyncio.sleep(3)
 
+            print(f"\n[DEBUG] ========== ISSUE LOOP COMPLETED ==========")
+            print(f"[DEBUG] All {len(issues_to_implement)} issues processed")
+
         # Final state and summary
+        print(f"\n[DEBUG] ========== FINAL STATE CHECKPOINT ==========")
+        print(f"[DEBUG] About to set state to COMPLETING")
         self.state = ExecutionState.COMPLETING
+        print(f"[DEBUG] Calling show_summary()...")
         await self.show_summary()
+        print(f"[DEBUG] show_summary() completed")
 
         # Set final state
         stats = self.issue_manager.get_summary_stats()

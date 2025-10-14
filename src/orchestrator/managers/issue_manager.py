@@ -116,11 +116,16 @@ class IssueManager:
         Issue state (open/closed) is NOT enough - the branch must be merged.
         """
         issue_iid = get_issue_iid(issue)
+        issue_title = issue.get('title', 'Unknown')
+        print(f"[COMPLETION-CHECK] Checking if issue #{issue_iid} ({issue_title}) is completed...")
+
         if not issue_iid:
+            print(f"[COMPLETION-CHECK] Issue #{issue_iid}: No IID found - treating as NOT completed")
             return False
 
         try:
             # STEP 1: Check for merged MRs mentioning this issue
+            print(f"[COMPLETION-CHECK] Issue #{issue_iid}: Step 1 - Checking for merged MRs...")
             list_mrs_tool = self._get_tool('list_merge_requests')
 
             if list_mrs_tool:
@@ -133,6 +138,7 @@ class IssueManager:
                     try:
                         mrs = json.loads(mrs_response)
                         if isinstance(mrs, list):
+                            print(f"[COMPLETION-CHECK] Issue #{issue_iid}: Found {len(mrs)} merged MRs to check")
                             for mr in mrs:
                                 mr_title = mr.get('title', '').lower()
                                 mr_description = mr.get('description', '').lower()
@@ -143,16 +149,25 @@ class IssueManager:
                                     f"#{issue_iid}" in mr_description or
                                     f"issue-{issue_iid}" in source_branch or
                                     f"closes #{issue_iid}" in mr_description):
-                                    print(f"[CHECK] Issue #{issue_iid} already merged via MR: {mr.get('title')}")
+                                    print(f"[COMPLETION-CHECK] Issue #{issue_iid}: [OK] COMPLETED - Found merged MR: {mr.get('title')}")
+                                    print(f"[COMPLETION-CHECK] Issue #{issue_iid}: MR branch: {source_branch}")
                                     return True  # Found merged MR - truly completed
+                            print(f"[COMPLETION-CHECK] Issue #{issue_iid}: No merged MRs found referencing this issue")
                     except json.JSONDecodeError:
+                        print(f"[COMPLETION-CHECK] Issue #{issue_iid}: Failed to parse MRs response")
                         pass
+                else:
+                    print(f"[COMPLETION-CHECK] Issue #{issue_iid}: MRs response is not a string (type: {type(mrs_response)})")
 
             # STEP 2: No merged MR found - check if work is in progress
             # If issue is closed but no merged MR, the branch might still need merging!
+            print(f"[COMPLETION-CHECK] Issue #{issue_iid}: Step 2 - Checking issue state...")
+            issue_state = issue.get('state', 'unknown')
+            print(f"[COMPLETION-CHECK] Issue #{issue_iid}: State is '{issue_state}'")
+
             if issue.get('state') == 'closed':
-                print(f"[CHECK] Issue #{issue_iid} is closed but NO merged MR found")
-                print(f"[CHECK] Will check if feature branch exists and needs merging...")
+                print(f"[COMPLETION-CHECK] Issue #{issue_iid}: Issue is CLOSED but NO merged MR found")
+                print(f"[COMPLETION-CHECK] Issue #{issue_iid}: Checking if feature branch exists...")
 
                 # Check if feature branch exists
                 branch_pattern = f"feature/issue-{issue_iid}-"
@@ -178,13 +193,21 @@ class IssueManager:
 
                 # Issue closed, no branch found, no merged MR
                 # This is edge case - issue might have been closed without implementation
-                print(f"[CHECK] Issue #{issue_iid} closed with no branch or MR - treating as completed")
+                print(f"[COMPLETION-CHECK] Issue #{issue_iid}: [OK] COMPLETED - Issue closed with no branch or MR")
+                print(f"[COMPLETION-CHECK] Issue #{issue_iid}: Treating as completed (edge case)")
                 return True
+            else:
+                # Issue is open - not completed
+                print(f"[COMPLETION-CHECK] Issue #{issue_iid}: [X] NOT COMPLETED - Issue is open and no merged MR exists")
+                return False
 
         except Exception as e:
-            print(f"[CHECK] Error checking completion status for issue #{issue_iid}: {e}")
+            print(f"[COMPLETION-CHECK] Issue #{issue_iid}: ERROR during check: {e}")
+            import traceback
+            traceback.print_exc()
 
         # Default: Not completed
+        print(f"[COMPLETION-CHECK] Issue #{issue_iid}: [X] NOT COMPLETED - Default (no evidence of completion)")
         return False
 
     def track_completed_issue(self, issue: Dict[str, Any]):

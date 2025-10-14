@@ -112,6 +112,12 @@ async def websocket_endpoint(websocket: WebSocket):
 
     try:
         while True:
+            # Check if WebSocket is still connected before trying to receive
+            # This prevents RuntimeError when connection is closed
+            if websocket.client_state.name != "CONNECTED":
+                print(f"[WS] Connection no longer active (state: {websocket.client_state.name}), breaking loop")
+                break
+
             # Receive message from client
             data = await websocket.receive_text()
             message = json.loads(data)
@@ -125,6 +131,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 config = message.get("data", {}).get("config", {})
                 print(f"[DEBUG] WebSocket received config: {config}")
                 await orchestrator.start(config)
+                # After orchestrator completes, send a completion signal
+                print("[WS] Orchestrator completed, sending completion signal")
+                await websocket.send_json({
+                    "type": "orchestrator_complete",
+                    "data": {"message": "All issues processed successfully"}
+                })
 
             elif message["type"] == "stop_system":
                 # Stop the orchestrator
@@ -144,6 +156,18 @@ async def websocket_endpoint(websocket: WebSocket):
         reason = e.reason if hasattr(e, 'reason') else str(e)
         print(f"[WS] Client disconnected: ({close_code}, '{reason}')")
         ws_manager.disconnect(websocket, reason=reason, close_code=close_code)
+    except RuntimeError as e:
+        # Handle RuntimeError that occurs when trying to receive from closed WebSocket
+        if "WebSocket is not connected" in str(e) or "Need to call \"accept\" first" in str(e):
+            print(f"[WS] WebSocket connection closed unexpectedly: {e}")
+            ws_manager.disconnect(websocket, reason=f"Connection closed: {str(e)}")
+        else:
+            # Re-raise if it's a different RuntimeError
+            print(f"[WS-ERROR] Unexpected RuntimeError in WebSocket handler: {e}")
+            import traceback
+            traceback.print_exc()
+            ws_manager.disconnect(websocket, reason=f"RuntimeError: {str(e)}")
+            raise
     except Exception as e:
         print(f"[WS-ERROR] Unhandled exception in WebSocket handler: {e}")
         import traceback

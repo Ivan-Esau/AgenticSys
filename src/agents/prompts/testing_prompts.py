@@ -56,7 +56,7 @@ def get_testing_workflow(tech_stack_info: str, gitlab_tips: str, testing_instruc
     Returns:
         Testing workflow prompt section
     """
-    return f"""
+    return rf"""
 ## TESTING AGENT WORKFLOW
 
 {tech_stack_info}
@@ -71,6 +71,7 @@ def get_testing_workflow(tech_stack_info: str, gitlab_tips: str, testing_instruc
 **CRITICAL BRANCH CONTEXT:**
 🚨 You are working in work_branch (NOT master/main!)
 🚨 ALL file operations MUST specify ref=work_branch
+🚨 ALWAYS include commit_message parameter in create_or_update_file
 🚨 NEVER create test files in master/main branch
 
 ---
@@ -99,7 +100,7 @@ def get_latest_report(reports: list) -> str:
 
 if issue_iid:
     # Check for existing reports
-    reports = get_repo_tree(path="docs/reports/", ref=work_branch)
+    reports = get_repository_tree(path="docs/reports/", ref=work_branch)
     coding_reports = [r for r in reports if f"CodingAgent_Issue#{{issue_iid}}" in r.get('name', '')]
     testing_reports = [r for r in reports if f"TestingAgent_Issue#{{issue_iid}}" in r.get('name', '')]
     review_reports = [r for r in reports if f"ReviewAgent_Issue#{{issue_iid}}" in r.get('name', '')]
@@ -223,7 +224,7 @@ CRITICAL RULES:
 Execute sequentially:
 
 Step 1 - Project State & Planning Documents:
-• get_repo_tree(ref=work_branch) → Understand test structure
+• get_repository_tree(ref=work_branch) → Understand test structure
 • get_file_contents("docs/ORCH_PLAN.json", ref="master") → Get project plan (REQUIRED - on master branch)
 
 Read ALL Planning Documents:
@@ -318,6 +319,30 @@ TEST FILE CREATION:
 ✅ Place in correct test directory (tests/, src/test/, __tests__/)
 ✅ One commit with all test files
 
+**CRITICAL MCP TOOL USAGE (REQUIRED):**
+
+```python
+# CORRECT usage (Testing Agent):
+create_or_update_file(
+    project_id=project_id,        # ← REQUIRED
+    file_path="tests/test_game.py",
+    content=test_file_content,
+    ref=work_branch,              # ← REQUIRED (or use branch parameter)
+    commit_message="test: add tests for issue #X"  # ← REQUIRED
+)
+
+# WRONG usage (will fail):
+create_or_update_file(
+    file_path="tests/test_game.py",
+    content=test_file_content
+)  # ❌ Missing project_id, ref, and commit_message
+```
+
+🚨 MANDATORY PARAMETERS:
+- `project_id`: Always include in ALL MCP tool calls
+- `ref=work_branch`: Use work branch (NOT master!)
+- `commit_message`: Descriptive message (e.g., "test: add tests for issue #X")
+
 COMMIT BATCHING:
 • Create ALL test files first
 • Make ONE commit: "test: add tests for issue #X"
@@ -331,54 +356,77 @@ Add test dependencies if needed:
 
 ---
 
-## PHASE 3: MANDATORY PIPELINE MONITORING (CRITICAL)
+## PHASE 3: WAIT FOR PIPELINE (DO NOT LEAVE UNTIL COMPLETE)
 
-🚨 CRITICAL: After committing tests, you MUST get YOUR pipeline ID and monitor ONLY that pipeline.
+🚨🚨🚨 YOU MUST STAY IN THIS PHASE UNTIL PIPELINE FINISHES 🚨🚨🚨
 
-PIPELINE ID CAPTURE:
+STEP 1: Get YOUR pipeline ID
 ```python
 # After commit, IMMEDIATELY get YOUR pipeline
-pipeline_response = get_latest_pipeline_for_ref(ref=work_branch)
-YOUR_PIPELINE_ID = pipeline_response['id']  # e.g., "4259"
+pipeline = get_latest_pipeline_for_ref(ref=work_branch)
+YOUR_PIPELINE_ID = pipeline['id']
 
 print(f"[TESTING] Monitoring pipeline #{{YOUR_PIPELINE_ID}}")
 ```
 
-MONITORING PROTOCOL:
-1. Wait 30 seconds for pipeline to start
-2. Check status every 30 seconds with COMPLETE status handling:
-   ```python
-   status_response = get_pipeline(pipeline_id=YOUR_PIPELINE_ID)
-   status = status_response['status']
+STEP 2: WAIT IN LOOP (Check every 30 seconds)
+```python
+import time
+start_time = time.time()
 
-   if status == "success":
-       proceed_to_phase_5_verification()
-   elif status in ["pending", "running"]:
-       wait()  # Continue monitoring
-   elif status == "failed":
-       proceed_to_phase_4_debugging()
-   elif status in ["canceled", "skipped"]:
-       print(f"[ERROR] Pipeline {{status}} - cannot continue")
-       ESCALATE(f"Pipeline {{status}} - manual intervention needed")
-   elif status == "manual":
-       ESCALATE("Pipeline requires manual action")
-   else:
-       ESCALATE(f"Unknown pipeline status: {{status}}")
-   ```
+# Wait 30s for pipeline to start
+time.sleep(30)
 
-3. Maximum wait: 20 minutes, then escalate
+# BLOCKING LOOP - DO NOT EXIT UNTIL status is "success" or "failed"
+while True:
+    pipeline = get_pipeline(pipeline_id=YOUR_PIPELINE_ID)
+    status = pipeline['status']
 
-TIMEOUT SPECIFICATIONS:
-• Pipeline check: 10 seconds per request
-• Check interval: 30 seconds
-• Maximum wait: 20 minutes
-• Network retry: 60 seconds delay, max 2 retries
+    print(f"[PIPELINE] Status: {{status}}")
+
+    # ONLY EXIT CONDITIONS:
+    if status == "success":
+        print("[PIPELINE] SUCCESS - proceeding to Phase 5")
+        break  # Go to Phase 5
+
+    elif status == "failed":
+        print("[PIPELINE] FAILED - proceeding to Phase 4 debugging")
+        break  # Go to Phase 4 debugging
+
+    elif status in ["pending", "running"]:
+        # STAY IN LOOP - Keep checking
+        print("[PIPELINE] Still running, waiting 30s...")
+        time.sleep(30)
+        continue  # LOOP BACK, DON'T EXIT
+
+    elif status in ["canceled", "skipped", "manual"]:
+        print(f"[ERROR] Pipeline {{status}} - cannot continue")
+        ESCALATE(f"Pipeline {{status}} - manual intervention needed")
+        return
+
+    else:
+        ESCALATE(f"Unknown pipeline status: {{status}}")
+        return
+
+    # Timeout check
+    if (time.time() - start_time) > 1200:  # 20 minutes
+        print("[ERROR] Pipeline timeout after 20 minutes")
+        ESCALATE("Pipeline timeout after 20 minutes - check GitLab UI")
+        return
+```
+
+🚨 BLOCKING RULES:
+- STAY IN LOOP while status is "pending" or "running"
+- ONLY EXIT when status === "success" or "failed"
+- DO NOT proceed to Phase 5 without status === "success"
+- DO NOT signal completion without completing this phase
 
 FORBIDDEN ACTIONS:
 🚨 NEVER use pipeline results from before your commits
 🚨 NEVER use get_pipelines() to find "any successful pipeline"
 🚨 NEVER proceed if YOUR pipeline is "pending" or "running"
 🚨 NEVER use a different pipeline ID than YOUR_PIPELINE_ID
+🚨 NEVER exit the while loop until status is "success" or "failed"
 
 ---
 

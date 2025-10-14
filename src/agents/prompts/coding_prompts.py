@@ -52,7 +52,7 @@ def get_coding_workflow(tech_stack_info: str, gitlab_tips: str, coding_instructi
     Returns:
         Coding workflow prompt section
     """
-    return f"""
+    return rf"""
 ## CODING AGENT WORKFLOW
 
 {tech_stack_info}
@@ -95,7 +95,7 @@ def get_latest_report(reports: list) -> str:
 
 if issue_iid:
     # Check for existing reports
-    reports = get_repo_tree(path="docs/reports/", ref=work_branch)
+    reports = get_repository_tree(path="docs/reports/", ref=work_branch)
     coding_reports = [r for r in reports if f"CodingAgent_Issue#{{issue_iid}}" in r.get('name', '')]
     testing_reports = [r for r in reports if f"TestingAgent_Issue#{{issue_iid}}" in r.get('name', '')]
     review_reports = [r for r in reports if f"ReviewAgent_Issue#{{issue_iid}}" in r.get('name', '')]
@@ -200,7 +200,7 @@ CRITICAL RULES:
 Execute sequentially:
 
 Step 1 - Project State:
-• get_repo_tree(ref=work_branch) → Understand structure
+• get_repository_tree(ref=work_branch) → Understand structure
 • get_file_contents("docs/ORCH_PLAN.json", ref="master") → Get plan (REQUIRED - on master branch)
 
 Step 1.5 - Read ALL Planning Documents:
@@ -411,46 +411,97 @@ COMMIT BATCHING:
 
 ---
 
-## PHASE 4: COMPILATION VERIFICATION
+## PHASE 4: WAIT FOR PIPELINE (DO NOT LEAVE UNTIL COMPLETE)
 
-AFTER all files created:
+🚨🚨🚨 YOU MUST STAY IN THIS PHASE UNTIL PIPELINE FINISHES 🚨🚨🚨
 
-1. Wait 30 seconds for pipeline to start
-2. Get YOUR pipeline ID:
-   ```python
-   pipeline = get_latest_pipeline_for_ref(ref=work_branch)
-   YOUR_PIPELINE_ID = pipeline['id']  # Store and use ONLY this ID
-   ```
+STEP 1: Get YOUR pipeline ID
+```python
+# After commit, IMMEDIATELY get YOUR pipeline
+pipeline = get_latest_pipeline_for_ref(ref=work_branch)
+YOUR_PIPELINE_ID = pipeline['id']
 
-3. Monitor YOUR jobs (build/compile only):
-   ```python
-   pipeline = get_pipeline(pipeline_id=YOUR_PIPELINE_ID)
+print(f"[CODING] Monitoring pipeline #{{YOUR_PIPELINE_ID}}")
+```
 
-   if pipeline['status'] in ["pending", "running"]:
-       wait()  # Continue monitoring
+STEP 2: WAIT IN LOOP (Check every 30 seconds)
+```python
+import time
+start_time = time.time()
 
-   # Check YOUR jobs only (not test jobs)
-   jobs = get_pipeline_jobs(pipeline_id=YOUR_PIPELINE_ID)
-   build_jobs = [j for j in jobs if 'build' in j['name'].lower() or 'compile' in j['name'].lower()]
+# Wait 30s for pipeline to start
+time.sleep(30)
 
-   # Test jobs are NOT your concern
-   if all(j['status'] == 'success' for j in build_jobs):
-       print("[CODING] ✅ Build/compile passed - my job is done")
-       proceed_to_report()
-   elif any(j['status'] == 'failed' for j in build_jobs):
-       print("[CODING] ❌ Build failed - analyzing")
-       analyze_and_fix()
-   ```
+# BLOCKING LOOP - DO NOT EXIT UNTIL status is "success" or "failed"
+while True:
+    pipeline = get_pipeline(pipeline_id=YOUR_PIPELINE_ID)
+    status = pipeline['status']
 
-4. Maximum wait: 20 minutes, then escalate
+    print(f"[PIPELINE] Status: {{status}}")
+
+    # ONLY EXIT CONDITIONS:
+    if status == "success":
+        print("[PIPELINE] SUCCESS - checking build jobs")
+        # Verify YOUR jobs succeeded
+        jobs = get_pipeline_jobs(pipeline_id=YOUR_PIPELINE_ID)
+        build_jobs = [j for j in jobs if 'build' in j['name'].lower() or 'compile' in j['name'].lower()]
+
+        if build_jobs and all(j['status'] == 'success' for j in build_jobs):
+            print("[CODING] Build/compile passed - proceeding to Phase 6")
+            break  # Go to Phase 6 (Success Verification)
+        else:
+            print("[CODING] Build jobs not all successful, waiting...")
+            time.sleep(30)
+            continue
+
+    elif status == "failed":
+        print("[PIPELINE] FAILED - checking build jobs")
+        jobs = get_pipeline_jobs(pipeline_id=YOUR_PIPELINE_ID)
+        build_jobs = [j for j in jobs if 'build' in j['name'].lower() or 'compile' in j['name'].lower()]
+
+        if build_jobs and any(j['status'] == 'failed' for j in build_jobs):
+            print("[CODING] Build failed - proceeding to Phase 5 debugging")
+            break  # Go to Phase 5 (Compilation Error Debugging)
+        else:
+            print("[CODING] Build jobs ok, failure in test jobs (not my concern)")
+            break  # Go to Phase 6
+
+    elif status in ["pending", "running"]:
+        # STAY IN LOOP - Keep checking
+        print("[PIPELINE] Still running, waiting 30s...")
+        time.sleep(30)
+        continue  # LOOP BACK, DON'T EXIT
+
+    elif status in ["canceled", "skipped", "manual"]:
+        print(f"[ERROR] Pipeline {{status}} - cannot continue")
+        ESCALATE(f"Pipeline {{status}} - manual intervention needed")
+        return
+
+    else:
+        ESCALATE(f"Unknown pipeline status: {{status}}")
+        return
+
+    # Timeout check
+    if (time.time() - start_time) > 1200:  # 20 minutes
+        print("[ERROR] Pipeline timeout after 20 minutes")
+        ESCALATE("Pipeline timeout after 20 minutes - check GitLab UI")
+        return
+```
+
+🚨 BLOCKING RULES:
+- STAY IN LOOP while status is "pending" or "running"
+- ONLY EXIT when status === "success" or "failed"
+- DO NOT proceed to Phase 6 without verifying build jobs succeeded
+- DO NOT signal completion without completing this phase
 
 🚨 YOUR JOBS: build, compile, lint
 ❌ NOT YOUR JOBS: test, pytest, junit, jest, coverage
 
 CRITICAL:
 ✅ Only check build/compile jobs, ignore test failures
-✅ Your job is done when BUILD succeeds (even if tests haven't run)
+✅ Your job is done when BUILD succeeds (even if tests fail)
 ❌ NEVER debug test failures (Testing Agent's job)
+❌ NEVER exit the while loop until status is "success" or "failed"
 
 ---
 
