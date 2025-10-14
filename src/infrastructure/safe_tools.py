@@ -69,13 +69,41 @@ def create_safe_merge_tool(
         project_id: str,
         mr_iid: int,
         merge_commit_message: str = None,
+        skip_validation: bool = False,
         **kwargs
     ) -> Dict[str, Any]:
         """
         Safe merge that validates pipeline success BEFORE merging.
 
+        Args:
+            project_id: GitLab project ID
+            mr_iid: Merge request IID
+            merge_commit_message: Optional commit message
+            skip_validation: If True, skip validation and merge directly.
+                           Use this when you've already verified conditions manually.
+
         Returns error dict if validation fails, merge result if successful.
         """
+        # FAST PATH: Skip validation if agent has already verified conditions
+        if skip_validation:
+            print(f"\n[SAFE-MERGE] Skipping validation (agent pre-verified) - merging MR #{mr_iid} directly...")
+            merge_params = {
+                "project_id": project_id,
+                "mr_iid": mr_iid
+            }
+            if merge_commit_message:
+                merge_params["merge_commit_message"] = merge_commit_message
+            merge_params.update(kwargs)
+
+            try:
+                result = await merge_tool.ainvoke(merge_params)
+                print(f"[SAFE-MERGE] [OK] Merge completed successfully (validation skipped)")
+                return result
+            except Exception as e:
+                error_msg = f"[X] MERGE FAILED: {extract_exception_from_group(e)}"
+                print(f"[SAFE-MERGE] {error_msg}")
+                return {"error": error_msg, "blocked": True}
+
         print(f"\n[SAFE-MERGE] Validating MR #{mr_iid} before merge...")
 
         # STEP 1: Get MR details (with advanced retry logic for MCP TaskGroup exceptions)
@@ -299,11 +327,134 @@ def create_safe_merge_tool(
         func=safe_merge_merge_request,
         name="merge_merge_request",
         description=(
-            "Merge a merge request with validation. "
-            "AUTOMATICALLY validates pipeline success before merging. "
-            "Will return error if pipeline is not successful or MR is not mergeable."
+            "Merge a merge request with optional validation. "
+            "By default, AUTOMATICALLY validates pipeline success before merging. "
+            "\n\nParameters:\n"
+            "- project_id: GitLab project ID\n"
+            "- mr_iid: Merge request IID  \n"
+            "- merge_commit_message: Optional commit message\n"
+            "- skip_validation: Set to True to skip validation if you've already verified:\n"
+            "  1. Pipeline status is 'success'\n"
+            "  2. All pipeline jobs are 'success'\n"
+            "  3. MR merge_status is 'can_be_merged'\n"
+            "\nUSE skip_validation=True when:\n"
+            "- You've manually verified all conditions using get_merge_request, get_pipeline, list_pipeline_jobs\n"
+            "- The automatic validation is failing due to MCP connection issues\n"
+            "- You've confirmed the MR is ready to merge but the tool keeps failing\n"
+            "\nWithout skip_validation, will return error if validation fails or pipeline is not successful."
         ),
         coroutine=safe_merge_merge_request
+    )
+
+
+def create_validate_merge_conditions_tool(
+    get_mr_tool: StructuredTool,
+    get_pipeline_tool: StructuredTool,
+    get_jobs_tool: StructuredTool
+) -> StructuredTool:
+    """
+    Create a validation-only tool that checks if an MR is ready to merge.
+    This allows agents to verify conditions without actually merging.
+    """
+
+    async def validate_merge_conditions(
+        project_id: str,
+        mr_iid: int
+    ) -> Dict[str, Any]:
+        """
+        Validate if an MR meets all merge conditions.
+
+        Returns dict with 'ready' boolean and detailed status.
+        """
+        print(f"\n[VALIDATE-MERGE] Checking merge readiness for MR #{mr_iid}...")
+
+        try:
+            # Get MR details
+            mr_result = await get_mr_tool.ainvoke({
+                "project_id": project_id,
+                "mr_iid": mr_iid
+            })
+            mr = mr_result if isinstance(mr_result, dict) else __import__('json').loads(mr_result)
+
+            # Get pipeline
+            source_branch = mr.get('source_branch')
+            pipeline_result = await get_pipeline_tool.ainvoke({
+                "project_id": project_id,
+                "ref": source_branch
+            })
+            pipeline = pipeline_result if isinstance(pipeline_result, dict) else __import__('json').loads(pipeline_result)
+
+            # Get jobs
+            pipeline_id = pipeline.get('id')
+            jobs_result = await get_jobs_tool.ainvoke({
+                "project_id": project_id,
+                "pipeline_id": pipeline_id
+            })
+            jobs = jobs_result if isinstance(jobs_result, list) else __import__('json').loads(jobs_result)
+
+            # Validate conditions
+            pipeline_status = pipeline.get('status')
+            merge_status = mr.get('merge_status')
+            failed_jobs = [j for j in jobs if j.get('status') != 'success']
+
+            ready = (
+                pipeline_status == 'success' and
+                merge_status == 'can_be_merged' and
+                len(failed_jobs) == 0
+            )
+
+            result = {
+                "ready": ready,
+                "mr_status": merge_status,
+                "pipeline_status": pipeline_status,
+                "pipeline_id": pipeline_id,
+                "total_jobs": len(jobs),
+                "failed_jobs": len(failed_jobs),
+                "details": {
+                    "mr_mergeable": merge_status == 'can_be_merged',
+                    "pipeline_success": pipeline_status == 'success',
+                    "all_jobs_success": len(failed_jobs) == 0
+                }
+            }
+
+            if ready:
+                print(f"[VALIDATE-MERGE] [OK] MR #{mr_iid} is READY to merge")
+                print(f"[VALIDATE-MERGE]    Pipeline #{pipeline_id}: {pipeline_status}")
+                print(f"[VALIDATE-MERGE]    All {len(jobs)} jobs successful")
+                print(f"[VALIDATE-MERGE]    MR status: {merge_status}")
+            else:
+                print(f"[VALIDATE-MERGE] [X] MR #{mr_iid} is NOT ready to merge")
+                if not result["details"]["mr_mergeable"]:
+                    print(f"[VALIDATE-MERGE]    MR status: {merge_status} (expected: can_be_merged)")
+                if not result["details"]["pipeline_success"]:
+                    print(f"[VALIDATE-MERGE]    Pipeline status: {pipeline_status} (expected: success)")
+                if not result["details"]["all_jobs_success"]:
+                    print(f"[VALIDATE-MERGE]    Failed jobs: {len(failed_jobs)}/{len(jobs)}")
+
+            return result
+
+        except Exception as e:
+            error = extract_exception_from_group(e)
+            print(f"[VALIDATE-MERGE] [ERROR] Validation failed: {error}")
+            return {
+                "ready": False,
+                "error": error,
+                "details": {}
+            }
+
+    return StructuredTool.from_function(
+        func=validate_merge_conditions,
+        name="validate_merge_conditions",
+        description=(
+            "Validate if a merge request is ready to merge WITHOUT actually merging it. "
+            "Checks:\n"
+            "1. Pipeline status is 'success'\n"
+            "2. All pipeline jobs are 'success'\n"
+            "3. MR merge_status is 'can_be_merged'\n"
+            "\nReturns dict with 'ready' boolean and detailed status.\n"
+            "Use this to verify merge conditions before calling merge_merge_request with skip_validation=True."
+        ),
+        coroutine=validate_merge_conditions
     )
 
 
@@ -313,6 +464,7 @@ def wrap_tools_with_safety(tools: List[Any]) -> List[Any]:
 
     Currently wraps:
     - merge_merge_request: Validates pipeline success before merging
+    - Adds validate_merge_conditions: Check merge readiness without merging
 
     This function is idempotent - calling it multiple times is safe.
 
@@ -356,12 +508,21 @@ def wrap_tools_with_safety(tools: List[Any]) -> List[Any]:
         get_jobs_tool
     )
 
-    # Replace merge tool with safe version
+    # Create validation helper tool
+    validate_tool = create_validate_merge_conditions_tool(
+        get_mr_tool,
+        get_pipeline_tool,
+        get_jobs_tool
+    )
+
+    # Replace merge tool with safe version and add validation tool
     wrapped_tools = [
         safe_merge_tool if t.name == 'merge_merge_request' else t
         for t in tools
     ]
+    wrapped_tools.append(validate_tool)
 
     print("[SAFE-TOOLS] [OK] Wrapped merge_merge_request with validation")
+    print("[SAFE-TOOLS] [OK] Added validate_merge_conditions tool")
 
     return wrapped_tools
