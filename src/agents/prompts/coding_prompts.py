@@ -364,9 +364,9 @@ Before implementing any file/class/function, ask:
 
 File Placement (from ORCH_PLAN.json):
 • Check package_structure.packages for correct location
-• Example: "Board" entity → "model" package → src/main/java/com/example/model/Board.java
-• Example: "GameController" → "controller" package
-• Example: "GameService" → "service" package
+• Example: "Product" entity → "model" package → src/main/java/com/example/model/Product.java
+• Example: "ProductController" → "controller" package
+• Example: "ProductService" → "service" package
 
 Entry Point Creation (Issue #1 ONLY):
 • If this is issue #1 (first implementation):

@@ -180,10 +180,10 @@ Analyze issues to determine:
    ✅ Default: "GUI" if unclear (most user-friendly option)
 
 2. **Core Entities** (extract nouns from issue titles/descriptions):
-   - Issue: "Create Game board" → Entity: "Board"
-   - Issue: "Implement Ship placement" → Entity: "Ship"
-   - Issue: "Add Player management" → Entity: "Player"
-   - Collect all entities: ["Game", "Board", "Ship", "Player"]
+   - Issue: "Create Product catalog" → Entity: "Product"
+   - Issue: "Implement Order processing" → Entity: "Order"
+   - Issue: "Add User management" → Entity: "User"
+   - Collect all entities: ["Product", "Order", "User", "Category"]
 
 3. **Package Structure** (based on project size):
    - <5 issues → simple: ["main", "util"]
@@ -383,7 +383,7 @@ EXACT STRUCTURE REQUIRED:
     "style": "layered|feature-based|simple",
     "packages": ["model", "controller", "service", "util"]
   }},
-  "core_entities": ["Game", "Board", "Ship", "Player"],
+  "core_entities": ["Product", "Order", "User", "Category"],
   "architecture_decision": {{
     "structure_type": "Minimal|Standard|Enterprise",
     "patterns": ["MVC|Layered|Clean|Simple"],
@@ -575,8 +575,8 @@ CRITICAL RULES:
 🚨 ABSOLUTELY FORBIDDEN:
 ❌ NEVER create src/ directory or any source code files
 ❌ NEVER create tests/ directory or any test files
-❌ NEVER create Game.java, Board.java, or any implementation classes
-❌ NEVER create BoardTest.java, GameTest.java, or any test classes
+❌ NEVER create implementation classes (Coding Agent's job)
+❌ NEVER create test classes (Testing Agent's job)
 ❌ NEVER create pom.xml, requirements.txt, package.json, or dependency files
 ❌ NEVER create .gitignore, .editorconfig, or tooling configuration
 ❌ NEVER create or modify .gitlab-ci.yml (pipeline is system-managed)

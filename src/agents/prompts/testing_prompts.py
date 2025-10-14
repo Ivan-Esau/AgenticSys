@@ -325,7 +325,7 @@ TEST FILE CREATION:
 # CORRECT usage (Testing Agent):
 create_or_update_file(
     project_id=project_id,        # ← REQUIRED
-    file_path="tests/test_game.py",
+    file_path="tests/test_product.py",
     content=test_file_content,
     ref=work_branch,              # ← REQUIRED (or use branch parameter)
     commit_message="test: add tests for issue #X"  # ← REQUIRED
@@ -333,7 +333,7 @@ create_or_update_file(
 
 # WRONG usage (will fail):
 create_or_update_file(
-    file_path="tests/test_game.py",
+    file_path="tests/test_product.py",
     content=test_file_content
 )  # ❌ Missing project_id, ref, and commit_message
 ```
