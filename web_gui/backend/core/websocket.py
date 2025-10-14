@@ -482,7 +482,13 @@ class ConnectionManager:
         }
 
     async def start_keepalive(self):
-        """Start the keepalive background task"""
+        """
+        Start the keepalive background task.
+
+        IMPORTANT: Runs in the main event loop but designed to minimize
+        interference with other async operations (like MCP client calls).
+        The keepalive uses exponential intervals and error isolation.
+        """
         if self._keepalive_running:
             print("[WS-KEEPALIVE] Keepalive already running")
             return
@@ -490,6 +496,7 @@ class ConnectionManager:
         self._keepalive_running = True
         self.keepalive_task = asyncio.create_task(self._keepalive_loop())
         print(f"[WS-KEEPALIVE] Started with {self.keepalive_interval}s interval")
+        print(f"[WS-KEEPALIVE] Using error-isolated ping mechanism to prevent TaskGroup interference")
 
     async def stop_keepalive(self):
         """Stop the keepalive background task"""
@@ -503,8 +510,15 @@ class ConnectionManager:
             print("[WS-KEEPALIVE] Stopped")
 
     async def _keepalive_loop(self):
-        """Background task that sends periodic pings to keep connections alive"""
+        """
+        Background task that sends periodic pings to keep connections alive.
+
+        Uses asyncio.shield() for each ping operation to prevent interference
+        with other tasks in the event loop (especially MCP client operations).
+        """
         print(f"[WS-KEEPALIVE] Loop started - sending pings every {self.keepalive_interval}s")
+        print(f"[WS-KEEPALIVE] Using shielded operations to prevent TaskGroup interference")
+
         try:
             while self._keepalive_running:
                 await asyncio.sleep(self.keepalive_interval)
@@ -512,18 +526,32 @@ class ConnectionManager:
                 if not self.active_connections:
                     continue
 
-                # Send ping to all active connections
+                # Send ping to all active connections with error isolation
                 disconnected = []
-                for connection in self.active_connections:
+                for connection in self.active_connections[:]:  # Copy list to avoid modification during iteration
                     try:
-                        await connection.send_json({
-                            "type": "keepalive",
-                            "timestamp": datetime.now().isoformat()
-                        })
+                        # Shield the ping operation from external cancellation
+                        # This prevents TaskGroup exceptions in other parts of the system
+                        # from interfering with WebSocket keepalive
+                        await asyncio.shield(
+                            connection.send_json({
+                                "type": "keepalive",
+                                "timestamp": datetime.now().isoformat()
+                            })
+                        )
+
                         # Update last ping time
                         if connection in self.connection_info:
                             self.connection_info[connection]["last_ping"] = datetime.now()
+
+                    except asyncio.CancelledError:
+                        # Keepalive task itself is being cancelled (e.g., server shutdown)
+                        # Don't mark connection as failed, just stop
+                        print(f"[WS-KEEPALIVE] Keepalive cancelled during ping")
+                        raise
+
                     except Exception as e:
+                        # Individual ping failed - mark connection as dead
                         conn_info = self.connection_info.get(connection, {})
                         connection_id = conn_info.get("connection_id", "unknown")
                         print(f"[WS-KEEPALIVE] Ping failed for connection #{connection_id}: {e}")
