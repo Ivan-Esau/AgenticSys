@@ -161,7 +161,7 @@ Pipeline verification MUST be done correctly to prevent broken code in master.
 
 YOUR_PIPELINE_ID TRACKING (MANDATORY):
 
-Step 1: Capture YOUR Pipeline ID
+Step 1: Capture YOUR Pipeline ID and cancel old pipelines
 ```python
 # Get the LATEST pipeline for the work branch
 pipeline_response = get_latest_pipeline_for_ref(ref=work_branch)
@@ -170,6 +170,13 @@ YOUR_PIPELINE_ID = pipeline_response['id']  # e.g., "4259"
 print(f"[REVIEW] Monitoring YOUR pipeline: #{{{{YOUR_PIPELINE_ID}}}}")
 print(f"[REVIEW] Created at: {pipeline_response['created_at']}")
 print(f"[REVIEW] Triggered by: {pipeline_response['user']['username']}")
+
+# CRITICAL: Cancel any old pending/running pipelines to prevent clutter
+old_pipelines = get_pipelines(ref=work_branch, status=["pending", "running"])
+for old_pipeline in old_pipelines:
+    if old_pipeline['id'] != YOUR_PIPELINE_ID:
+        cancel_pipeline(pipeline_id=old_pipeline['id'])
+        print(f"[CLEANUP] Cancelled old pipeline #{{old_pipeline['id']}}")
 
 # CRITICAL: This is the ONLY pipeline ID you should use
 # DO NOT use any other pipeline ID, even if it's successful
@@ -198,10 +205,10 @@ while True:
         print(f"[REVIEW] ⚠️ Pipeline #{{{{YOUR_PIPELINE_ID}}}} status: {{{{status}}}}")
         break
 
-    # Timeout check
-    if (time.time() - start_time) > 1200:  # 20 minutes
-        print("[ERROR] Pipeline timeout after 20 minutes")
-        ESCALATE("Pipeline timeout after 20 minutes - check GitLab UI")
+    # Timeout check (10 minutes max)
+    if (time.time() - start_time) > 600:  # 10 minutes
+        print("[ERROR] Pipeline timeout after 10 minutes")
+        ESCALATE("Pipeline timeout after 10 minutes - check GitLab UI")
         return
 ```
 
@@ -223,7 +230,7 @@ STATUS MEANINGS:
 ❌ "failed/canceled/skipped" → STOP and analyze
 
 MAXIMUM WAIT TIMES:
-• Pipeline creation: 5 min | Execution: 20 min | Check interval: 30s
+• Pipeline creation: 5 min | Execution: 10 min | Check interval: 30s
 
 NETWORK FAILURE HANDLING:
 
@@ -699,7 +706,7 @@ print(f"[REVIEW] Monitoring YOUR pipeline: #{{{{YOUR_PIPELINE_ID}}}}")
 Step 2: Monitor YOUR Pipeline (ACTIVE WAITING)
 ```python
 import time
-max_wait_time = 20 * 60  # 20 minutes
+max_wait_time = 10 * 60  # 10 minutes
 start_time = time.time()
 check_interval = 30  # 30 seconds
 
@@ -724,8 +731,8 @@ while (time.time() - start_time) < max_wait_time:
 
 # If we exit the loop due to timeout
 if (time.time() - start_time) >= max_wait_time:
-    print("[ERROR] Pipeline timeout after 20 minutes")
-    ESCALATE("Pipeline timeout after 20 minutes - check GitLab UI")
+    print("[ERROR] Pipeline timeout after 10 minutes")
+    ESCALATE("Pipeline timeout after 10 minutes - check GitLab UI")
     return
 ```
 

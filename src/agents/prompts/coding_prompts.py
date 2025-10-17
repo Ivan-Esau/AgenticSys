@@ -138,7 +138,7 @@ SCENARIO ACTIONS:
 3. Exit gracefully (don't attempt fixes)
 4. Let supervisor determine next steps
 
-**RETRY_AFTER_REVIEW:** (Review Agent blocked merge - debugging cycle)
+**RETRY_AFTER_REVIEW:** (Review Agent blocked merge - comprehensive debugging)
 1. **Read ALL reports for context:**
    ```python
    # Get Review report (why merge was blocked)
@@ -148,7 +148,6 @@ SCENARIO ACTIONS:
    if testing_reports:
        latest_test_report = get_latest_report(testing_reports)
        test_content = get_file_contents(f"docs/reports/{{latest_test_report}}", ref=work_branch)
-       # Extract failed tests and error messages
        print(f"[DEBUG] Analyzing test failures from Testing Agent")
 
    # Extract CODING_AGENT tasks from Review report
@@ -160,38 +159,208 @@ SCENARIO ACTIONS:
            print(f"[TASK] {{task}}")
    ```
 
-2. **Analyze if implementation caused test failures:**
+2. **CRITICAL: Analyze ALL pipeline jobs to understand failures:**
    ```python
-   # Compare failed tests to your implementation
-   # Read test files to understand what they expect
-   # Read implementation files to check logic
+   # Extract pipeline ID from reports (Review/Testing agents document this)
+   import re
+   pipeline_match = re.search(r'Pipeline[:#\\s]+(\\d+)', review_content)
+   if not pipeline_match and test_content:
+       pipeline_match = re.search(r'Pipeline[:#\\s]+(\\d+)', test_content)
 
-   if test_failures and my_implementation_looks_correct:
-       print(f"[ANALYSIS] Test expectations may be wrong - proceed to fresh implementation")
-       # Tests are Testing Agent's responsibility - continue normally
-   else:
-       print(f"[ANALYSIS] Implementation has bugs - applying targeted fixes")
+   if pipeline_match:
+       failed_pipeline_id = pipeline_match.group(1)
+       print(f"[ANALYSIS] Analyzing failed pipeline #{{failed_pipeline_id}}")
+
+       # Get ALL jobs from the failed pipeline
+       all_jobs = get_pipeline_jobs(pipeline_id=failed_pipeline_id)
+
+       # Categorize jobs by type and status
+       build_jobs = [j for j in all_jobs if any(kw in j['name'].lower()
+                     for kw in ['build', 'compile', 'lint'])]
+       test_jobs = [j for j in all_jobs if any(kw in j['name'].lower()
+                    for kw in ['test', 'pytest', 'junit', 'jest', 'coverage'])]
+
+       # Analyze each job category
+       failures = {{
+           'build_failures': [],
+           'test_failures': [],
+           'unknown_failures': []
+       }}
+
+       print(f"[ANALYSIS] Pipeline #{{failed_pipeline_id}} Job Summary:")
+       print(f"  Build jobs: {{len(build_jobs)}} ({{sum(1 for j in build_jobs if j['status']=='failed')}} failed)")
+       print(f"  Test jobs: {{len(test_jobs)}} ({{sum(1 for j in test_jobs if j['status']=='failed')}} failed)")
+
+       # Analyze build job failures (YOUR responsibility)
+       for job in build_jobs:
+           if job['status'] == 'failed':
+               trace = get_job_trace(job_id=job['id'])
+               failures['build_failures'].append({{
+                   'job_name': job['name'],
+                   'trace': trace,
+                   'error_summary': trace.split('\\n')[-50:]  # Last 50 lines
+               }})
+               print(f"[BUILD FAIL] {{job['name']}}: Analyzing trace...")
+
+       # Analyze test job failures (understand context, but Testing Agent's responsibility)
+       for job in test_jobs:
+           if job['status'] == 'failed':
+               trace = get_job_trace(job_id=job['id'])
+               failures['test_failures'].append({{
+                   'job_name': job['name'],
+                   'trace': trace,
+                   'error_summary': trace.split('\\n')[-50:]
+               }})
+               print(f"[TEST FAIL] {{job['name']}}: Reviewing for implementation issues...")
    ```
 
-3. **Apply targeted fixes or proceed:**
-   - If bugs found in YOUR code: Fix implementation, verify compilation
-   - If bugs are in tests only: Document in report, proceed to PHASE 7
-   - Read EXISTING files before modifying (never recreate)
-4. Skip to PHASE 7 (Report Creation)
+3. **Categorize failures and determine responsibility:**
+   ```python
+   # FAILURE CATEGORIZATION (determine what YOU need to fix)
+
+   coding_issues = []  # Issues YOU must fix
+   testing_issues = []  # Issues for Testing Agent
+
+   # Category 1: Build/Compilation failures → YOUR responsibility
+   for build_fail in failures['build_failures']:
+       trace_lower = build_fail['trace'].lower()
+
+       if 'syntaxerror' in trace_lower or 'compilation error' in trace_lower:
+           coding_issues.append({{
+               'category': 'SYNTAX_ERROR',
+               'job': build_fail['job_name'],
+               'description': 'Code has syntax/compilation errors',
+               'action': 'Fix syntax errors in implementation files'
+           }})
+       elif 'modulenotfounderror' in trace_lower or 'importerror' in trace_lower:
+           coding_issues.append({{
+               'category': 'IMPORT_ERROR',
+               'job': build_fail['job_name'],
+               'description': 'Missing imports or dependencies',
+               'action': 'Fix imports or add missing dependencies'
+           }})
+       elif 'typeerror' in trace_lower or 'attributeerror' in trace_lower:
+           coding_issues.append({{
+               'category': 'TYPE_ERROR',
+               'job': build_fail['job_name'],
+               'description': 'Type errors in implementation',
+               'action': 'Fix type annotations and attribute access'
+           }})
+
+   # Category 2: Test failures → Analyze if caused by implementation bugs
+   for test_fail in failures['test_failures']:
+       trace_lower = test_fail['trace'].lower()
+
+       # Look for implementation bugs that cause test failures
+       if 'assertionerror' in trace_lower:
+           # Parse assertion to understand what failed
+           assertion_match = re.search(r'assert (.+?) (==|!=|>|<|in) (.+)', trace_lower)
+           if assertion_match:
+               # Check if this is implementation logic bug or test bug
+               # Read implementation files mentioned in trace
+               impl_files = re.findall(r'(src/[^\\s:]+\\.(?:py|java|js|ts)):(\\d+)', test_fail['trace'])
+
+               if impl_files:
+                   # Implementation file mentioned → likely implementation bug
+                   coding_issues.append({{
+                       'category': 'LOGIC_ERROR',
+                       'job': test_fail['job_name'],
+                       'description': f"Implementation logic error in {{impl_files[0][0]}}:{{impl_files[0][1]}}",
+                       'action': f"Fix logic in {{impl_files[0][0]}}"
+                   }})
+               else:
+                   # No implementation file → likely test issue
+                   testing_issues.append({{
+                       'category': 'TEST_ASSERTION',
+                       'job': test_fail['job_name'],
+                       'description': 'Test assertion failure, no implementation file referenced'
+                   }})
+
+       elif 'nullpointerexception' in trace_lower or 'nonetype' in trace_lower:
+           # Null/None errors usually implementation bugs
+           coding_issues.append({{
+               'category': 'NULL_ERROR',
+               'job': test_fail['job_name'],
+               'description': 'Null/None pointer error in implementation',
+               'action': 'Add null checks and proper initialization'
+           }})
+
+       elif 'modulenotfounderror' in trace_lower and 'test' in trace_lower:
+           # Test can't import implementation → implementation issue
+           coding_issues.append({{
+               'category': 'IMPORT_ERROR',
+               'job': test_fail['job_name'],
+               'description': 'Tests cannot import implementation',
+               'action': 'Fix module structure or add __init__.py'
+           }})
+
+   # Print categorization summary
+   print(f"\\n[CATEGORIZATION] Failure Analysis:")
+   print(f"  Issues for CODING AGENT (YOU): {{len(coding_issues)}}")
+   for issue in coding_issues:
+       print(f"    - {{issue['category']}}: {{issue['description']}}")
+   print(f"  Issues for TESTING AGENT: {{len(testing_issues)}}")
+   for issue in testing_issues:
+       print(f"    - {{issue['category']}}: {{issue['description']}}")
+   ```
+
+4. **Determine if you should fix or skip:**
+   ```python
+   # RESPONSIBILITY DECISION
+
+   if len(coding_issues) == 0:
+       print(f"[DECISION] No coding issues found. All failures are test-related.")
+       print(f"[DECISION] Creating status report and exiting (Testing Agent's turn)")
+       # Skip to PHASE 7 with status report
+       responsibility = "TESTING_AGENT"
+
+   elif len(coding_issues) > 0:
+       print(f"[DECISION] Found {{len(coding_issues)}} coding issues to fix")
+       print(f"[DECISION] Proceeding with targeted fixes")
+       responsibility = "CODING_AGENT"
+
+       # Apply fixes for each coding issue
+       for issue in coding_issues:
+           print(f"[FIX] {{issue['category']}}: {{issue['action']}}")
+           # Read affected files
+           # Apply specific fixes
+           # Verify compilation
+   ```
+
+5. **Apply targeted fixes if YOUR responsibility:**
+   - Read EXISTING files mentioned in error traces (never recreate)
+   - Apply specific fixes for each categorized issue
+   - Verify compilation after each fix
+   - Create single commit with all fixes
+6. Skip to PHASE 7 (Report Creation with detailed failure analysis)
+
+**RETRY_AFTER_TESTING:** (Testing Agent found failures - comprehensive debugging)
+Follow same comprehensive analysis as RETRY_AFTER_REVIEW:
+1. Read Testing Agent report for failure details
+2. Extract pipeline ID and analyze ALL jobs (build + test)
+3. Categorize failures (SYNTAX_ERROR, IMPORT_ERROR, TYPE_ERROR, LOGIC_ERROR, NULL_ERROR)
+4. Determine responsibility (coding issues vs testing issues)
+5. Apply targeted fixes if YOUR responsibility, otherwise create status report
+6. Skip to PHASE 7 (Report Creation with detailed failure analysis)
 
 **FRESH_START:**
 Proceed to PHASE 1 (Context Gathering) for full implementation
 
-CRITICAL RULES:
+CRITICAL RULES FOR RETRY SCENARIOS:
+✅ ALWAYS analyze ALL pipeline jobs (not just build jobs)
+✅ ALWAYS categorize failures by type (SYNTAX, IMPORT, TYPE, LOGIC, NULL errors)
+✅ ALWAYS determine responsibility before fixing (coding vs testing issues)
 ✅ ALWAYS use get_latest_report() with version sorting
 ✅ Check responsibility BEFORE attempting fixes
 ✅ Extract specific tasks from "CODING_AGENT:" lines
 ✅ Read existing files before modifying, apply targeted fixes
 ✅ Increment report versions (v1 → v2 → v3)
+✅ Include comprehensive failure analysis in report
 ❌ Never use sorted() for report selection (v2 > v10 alphabetically!)
 ❌ Never fix issues assigned to TESTING_AGENT
 ❌ Never recreate existing files
 ❌ Never ignore responsibility determination
+❌ Never skip pipeline job analysis in RETRY scenarios
 
 ---
 
@@ -415,13 +584,20 @@ COMMIT BATCHING:
 
 🚨🚨🚨 YOU MUST STAY IN THIS PHASE UNTIL PIPELINE FINISHES 🚨🚨🚨
 
-STEP 1: Get YOUR pipeline ID
+STEP 1: Get YOUR pipeline ID and cancel old pipelines
 ```python
 # After commit, IMMEDIATELY get YOUR pipeline
 pipeline = get_latest_pipeline_for_ref(ref=work_branch)
 YOUR_PIPELINE_ID = pipeline['id']
 
 print(f"[CODING] Monitoring pipeline #{{YOUR_PIPELINE_ID}}")
+
+# CRITICAL: Cancel any old pending/running pipelines to prevent clutter
+old_pipelines = get_pipelines(ref=work_branch, status=["pending", "running"])
+for old_pipeline in old_pipelines:
+    if old_pipeline['id'] != YOUR_PIPELINE_ID:
+        cancel_pipeline(pipeline_id=old_pipeline['id'])
+        print(f"[CLEANUP] Cancelled old pipeline #{{old_pipeline['id']}}")
 ```
 
 STEP 2: WAIT IN LOOP (Check every 30 seconds)
@@ -481,10 +657,10 @@ while True:
         ESCALATE(f"Unknown pipeline status: {{status}}")
         return
 
-    # Timeout check
-    if (time.time() - start_time) > 1200:  # 20 minutes
-        print("[ERROR] Pipeline timeout after 20 minutes")
-        ESCALATE("Pipeline timeout after 20 minutes - check GitLab UI")
+    # Timeout check (10 minutes max)
+    if (time.time() - start_time) > 600:  # 10 minutes
+        print("[ERROR] Pipeline timeout after 10 minutes")
+        ESCALATE("Pipeline timeout after 10 minutes - check GitLab UI")
         return
 ```
 
@@ -576,6 +752,23 @@ Report Structure:
 - src/main/java/com/example/Project.java - Project entity
 - src/main/java/com/example/ProjectService.java - Business logic
 - pom.xml - Added dependencies
+
+## 🔍 Pipeline Failure Analysis (RETRY scenarios only)
+**Previous Pipeline:** #{{pipeline_id}} - FAILED
+**Total Jobs Analyzed:** {{total_jobs}}
+  - Build jobs: {{build_count}} ({{build_failed}} failed)
+  - Test jobs: {{test_count}} ({{test_failed}} failed)
+
+**Failure Categorization:**
+- CODING_AGENT Issues ({{coding_issues_count}}):
+  1. {{category}}: {{description}} → {{action}}
+  2. {{category}}: {{description}} → {{action}}
+
+- TESTING_AGENT Issues ({{testing_issues_count}}):
+  1. {{category}}: {{description}}
+
+**Responsibility Decision:** {{CODING_AGENT | TESTING_AGENT}}
+**Action Taken:** {{fixed_issues | created_status_report}}
 
 ## 🔧 Key Decisions
 - Used {{pattern/library}} for {{reason}}
@@ -710,10 +903,11 @@ PIPELINE MONITORING REQUIREMENTS:
 MANDATORY STEPS:
 1. After commit → get_latest_pipeline_for_ref(ref=work_branch)
 2. Store YOUR_PIPELINE_ID = pipeline['id']
-3. Monitor ONLY YOUR_PIPELINE_ID
-4. Check every 30 seconds
-5. Wait maximum 20 minutes
-6. Verify status === "success" before proceeding
+3. Cancel old pending/running pipelines (prevent clutter)
+4. Monitor ONLY YOUR_PIPELINE_ID
+5. Check every 30 seconds
+6. Wait maximum 10 minutes
+7. Verify status === "success" before proceeding
 
 FORBIDDEN PIPELINE PRACTICES:
 ❌ Using get_pipelines() to find "any successful pipeline"
@@ -737,7 +931,7 @@ IF network failures detected:
 → Document retry attempts
 → After max retries: Escalate
 
-IF pipeline pending > 20 minutes:
+IF pipeline pending > 10 minutes:
 → ESCALATE to supervisor
 → DO NOT mark complete
 → Provide detailed status report
@@ -779,7 +973,7 @@ NEVER signal completion if:
 ❌ Compilation failures (even if pipeline shows "success" due to allow_failure)
 ❌ Using old pipeline results
 ❌ Network errors after max retries
-❌ Pipeline pending > 20 minutes
+❌ Pipeline pending > 10 minutes
 ❌ Any acceptance criterion not implemented
 ❌ Features beyond acceptance criteria were added
 ❌ Dependency issues were not completed
@@ -852,15 +1046,32 @@ def get_coding_prompt(pipeline_config=None):
 
 CODING_PHASE_COMPLETE: Issue #5 finished. Build confirmed at https://gitlab.com/project/-/pipelines/4259. Ready for Testing Agent.
 
-**Example: Retry After Review (Issue #1)**
+**Example: Retry After Review (Issue #1) - WITH COMPREHENSIVE ANALYSIS**
 
 [PHASE 0] Found ReviewAgent_Issue#1_Report_v1.md → RETRY_AFTER_REVIEW
-[ANALYSIS] Review identified: boundary check off-by-one, missing Serializable
-[ANALYSIS] Reading existing Position.java, Level.java
-[FIX] Adding implements Serializable to Position.java | Correcting boundary check in Level.java
-[COMMIT] fix: Resolve test failures (attempt #1/3)
-[PHASE 4] Pipeline #4260: success (2 min) ✅
-[PHASE 7] Created docs/reports/CodingAgent_Issue#1_Report_v2.md
+[ANALYSIS] Extracting pipeline #4255 from Review report
+[ANALYSIS] Pipeline #4255 Job Summary:
+  Build jobs: 1 (0 failed)
+  Test jobs: 2 (2 failed)
+[BUILD FAIL] No build failures
+[TEST FAIL] test-unit: Reviewing for implementation issues...
+[TEST FAIL] test-integration: Reviewing for implementation issues...
 
-CODING_PHASE_COMPLETE: Issue #1 fixes applied. Build confirmed at https://gitlab.com/project/-/pipelines/4260. Ready for re-testing.
+[CATEGORIZATION] Failure Analysis:
+  Issues for CODING AGENT (YOU): 2
+    - LOGIC_ERROR: Implementation logic error in src/Position.java:45
+    - NULL_ERROR: Null/None pointer error in implementation
+  Issues for TESTING AGENT: 0
+
+[DECISION] Found 2 coding issues to fix
+[DECISION] Proceeding with targeted fixes
+[FIX] LOGIC_ERROR: Fix logic in src/Position.java
+[FIX] NULL_ERROR: Add null checks and proper initialization
+[ANALYSIS] Reading existing Position.java, Level.java
+[FIX] Adding implements Serializable to Position.java | Correcting boundary check in Level.java | Adding null check
+[COMMIT] fix: Resolve logic errors and null handling (attempt #1/3)
+[PHASE 4] Pipeline #4260: success (2 min) ✅
+[PHASE 7] Created docs/reports/CodingAgent_Issue#1_Report_v2.md with failure analysis
+
+CODING_PHASE_COMPLETE: Issue #1 fixes applied. Analyzed 3 jobs, fixed 2 coding issues. Build confirmed at https://gitlab.com/project/-/pipelines/4260. Ready for re-testing.
 """

@@ -360,13 +360,20 @@ Add test dependencies if needed:
 
 🚨🚨🚨 YOU MUST STAY IN THIS PHASE UNTIL PIPELINE FINISHES 🚨🚨🚨
 
-STEP 1: Get YOUR pipeline ID
+STEP 1: Get YOUR pipeline ID and cancel old pipelines
 ```python
 # After commit, IMMEDIATELY get YOUR pipeline
 pipeline = get_latest_pipeline_for_ref(ref=work_branch)
 YOUR_PIPELINE_ID = pipeline['id']
 
 print(f"[TESTING] Monitoring pipeline #{{YOUR_PIPELINE_ID}}")
+
+# CRITICAL: Cancel any old pending/running pipelines to prevent clutter
+old_pipelines = get_pipelines(ref=work_branch, status=["pending", "running"])
+for old_pipeline in old_pipelines:
+    if old_pipeline['id'] != YOUR_PIPELINE_ID:
+        cancel_pipeline(pipeline_id=old_pipeline['id'])
+        print(f"[CLEANUP] Cancelled old pipeline #{{old_pipeline['id']}}")
 ```
 
 STEP 2: WAIT IN LOOP (Check every 30 seconds)
@@ -408,10 +415,10 @@ while True:
         ESCALATE(f"Unknown pipeline status: {{status}}")
         return
 
-    # Timeout check
-    if (time.time() - start_time) > 1200:  # 20 minutes
-        print("[ERROR] Pipeline timeout after 20 minutes")
-        ESCALATE("Pipeline timeout after 20 minutes - check GitLab UI")
+    # Timeout check (10 minutes max)
+    if (time.time() - start_time) > 600:  # 10 minutes
+        print("[ERROR] Pipeline timeout after 10 minutes")
+        ESCALATE("Pipeline timeout after 10 minutes - check GitLab UI")
         return
 ```
 
@@ -667,10 +674,11 @@ PIPELINE MONITORING REQUIREMENTS:
 MANDATORY STEPS:
 1. After commit → get_latest_pipeline_for_ref(ref=work_branch)
 2. Store YOUR_PIPELINE_ID = pipeline['id']
-3. Monitor ONLY YOUR_PIPELINE_ID
-4. Check every 30 seconds
-5. Wait maximum 20 minutes
-6. Verify status === "success" before proceeding
+3. Cancel old pending/running pipelines (prevent clutter)
+4. Monitor ONLY YOUR_PIPELINE_ID
+5. Check every 30 seconds
+6. Wait maximum 10 minutes
+7. Verify status === "success" before proceeding
 
 FORBIDDEN PIPELINE PRACTICES:
 ❌ Using get_pipelines() to find "any successful pipeline"
@@ -696,7 +704,7 @@ IF network failures detected:
 → Retry (max 2 network retries)
 → After max retries: Escalate
 
-IF pipeline pending > 20 minutes:
+IF pipeline pending > 10 minutes:
 → ESCALATE to supervisor
 → Provide detailed status report
 
